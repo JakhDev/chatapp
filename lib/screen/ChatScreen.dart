@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -130,7 +129,6 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       body: Column(children: [
-        // ── Messages ──
         Expanded(
           child: msgs.isEmpty
               ? const _EmptyChat()
@@ -148,7 +146,6 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
         ),
-        // ── Input bar ──
         _InputBar(
           controller:  _textCtrl,
           isTyping:    _typing,
@@ -160,7 +157,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────
 class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
   @override
@@ -180,7 +176,6 @@ class _EmptyChat extends StatelessWidget {
   );
 }
 
-// ── Input bar ─────────────────────────────────────────────────
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool           isTyping;

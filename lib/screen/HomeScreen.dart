@@ -44,7 +44,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Header ────────────────────────────────────────────────────
 class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -87,7 +86,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ── Search ────────────────────────────────────────────────────
 class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
@@ -107,7 +105,6 @@ class _SearchBar extends StatelessWidget {
   );
 }
 
-// ── Chat list ─────────────────────────────────────────────────
 class _ChatList extends StatelessWidget {
   const _ChatList();
 
@@ -135,7 +132,6 @@ class _ChatList extends StatelessWidget {
   }
 }
 
-// ── Chat tile ─────────────────────────────────────────────────
 class _ChatTile extends StatelessWidget {
   final Chat chat;
   const _ChatTile({required this.chat});
@@ -220,7 +216,6 @@ class _ChatTile extends StatelessWidget {
   }
 }
 
-// ── New chat bottom sheet ─────────────────────────────────────
 class _NewChatSheet extends StatelessWidget {
   final _nameCtrl = TextEditingController();
 

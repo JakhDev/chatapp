@@ -22,7 +22,6 @@ class ChatProvider extends ChangeNotifier {
   List<Message> messages(String chatId) =>
       List.unmodifiable(_msgs[chatId] ?? []);
 
-  // ── Auth ──────────────────────────────────────────────────
   void login(String name) {
     _me = User(
       id:       '${DateTime.now().millisecondsSinceEpoch}',
@@ -33,14 +32,12 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Open chat ─────────────────────────────────────────────
   void openChat(String chatId) {
     _ws.joinChat(chatId);
     final i = _chats.indexWhere((c) => c.id == chatId);
     if (i != -1) { _chats[i].unreadCount = 0; notifyListeners(); }
   }
 
-  // ── Send ──────────────────────────────────────────────────
   void sendText(String chatId, String text) {
     if (_me == null || text.trim().isEmpty) return;
     _ws.sendMessage(
@@ -61,12 +58,10 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
-  // ── Create chats ──────────────────────────────────────────
   Chat newPersonal(User other) {
     final id  = '${_me!.id}_${other.id}';
     final hit = _chats.where((c) => c.id == id);
     if (hit.isNotEmpty) return hit.first;
-
     final chat = Chat(
       id:        id,
       name:      other.name,
@@ -92,10 +87,7 @@ class ChatProvider extends ChangeNotifier {
     return chat;
   }
 
-  // ── Incoming ──────────────────────────────────────────────
   void _onIncoming(Message msg) {
-    // Add to first chat that has an open msgs list (simplification)
-    // In production match chatId from WS payload
     for (final chat in _chats) {
       if (_msgs.containsKey(chat.id)) {
         _addMsg(chat.id, msg);
@@ -117,7 +109,6 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Demo data ─────────────────────────────────────────────
   void _loadDemo() {
     final chat1 = Chat(
       id: 'demo_jasur', name: 'Jasur',
@@ -140,7 +131,6 @@ class ChatProvider extends ChangeNotifier {
       unreadCount: 5,
     );
     _chats.addAll([chat1, chat2, group]);
-
     _msgs['demo_jasur'] = [
       Message(id:'1', senderId:'u1', senderName:'Jasur',
           content:'Salom! 👋', timestamp: DateTime.now().subtract(const Duration(minutes:10))),
