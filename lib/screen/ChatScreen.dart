@@ -6,7 +6,7 @@ import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/providers/ChatProvider.dart';
 import 'package:chatapp/theme/AppTheme.dart';
 import 'package:chatapp/widgets/AvatarWidget.dart';
-import 'package:chatapp/widgets/MessageBuble.dart'; // Sizning loyihadagi import fayl nomi
+import 'package:chatapp/widgets/MessageBuble.dart'; // Loyihadagi import fayl nomi
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
@@ -118,6 +118,17 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // ── VAQTNI FORMATLASH FUNKSIYASI (HH:mm) ─────────────────────────────────
+  String _formatMessageTime(DateTime dateTime) {
+    // 🔥 .toLocal() orqali vaqtni qurilmaning (O'zbekiston) vaqt zonasiga o'giramiz
+    final localTime = dateTime.toLocal();
+
+    final hour = localTime.hour.toString().padLeft(2, '0');
+    final minute = localTime.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
@@ -157,16 +168,6 @@ class _ChatScreenState extends State<ChatScreen> {
             ]),
           ),
         ]),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.videocam_outlined, color: AppTheme.textSecondary),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.call_outlined, color: AppTheme.textSecondary),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
@@ -184,8 +185,57 @@ class _ChatScreenState extends State<ChatScreen> {
                 final showName = isGroup && !isMine &&
                     (i == 0 || msgs[i - 1].senderId != msg.senderId);
 
-                return MessageBubble(
-                    message: msg, isMine: isMine, showSenderName: showName);
+                // 🔥 XATOLIKDAN MUTLAQ HIMOYA (TRY-CATCH)
+                // NoSuchMethodError bermasligi uchun xavfsiz tekshiramiz
+                bool isMessageRead = false;
+                try {
+                  final dynamic dynamicMsg = msg;
+                  isMessageRead = dynamicMsg.isRead == true ||
+                      dynamicMsg.isSeen == true ||
+                      dynamicMsg.seen == true;
+                } catch (_) {
+                  isMessageRead = false; // Agar modelda bunday maydon umuman bo'lmasa xato bermaydi
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Align(
+                    alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                      children: [
+                        MessageBubble(
+                            message: msg, isMine: isMine, showSenderName: showName),
+                        const SizedBox(height: 2),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatMessageTime(msg.timestamp),
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary.withOpacity(0.5),
+                                  fontSize: 10,
+                                ),
+                              ),
+                              // Faqat shaxsiy chatda va biz yuborgan xabarlarda galochka chiqadi
+                              if (isMine && !isGroup) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  isMessageRead ? Icons.done_all_rounded : Icons.done_rounded,
+                                  size: 14,
+                                  color: isMessageRead ? AppTheme.online : AppTheme.textSecondary.withOpacity(0.4),
+                                ),
+                              ]
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               },
             ),
           ),

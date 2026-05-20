@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+// Loyihangizdagi papka nomiga qarab 'screen' yoki 'screens' qilib tekshirib oling:
 import 'package:chatapp/screen/HomeScreen.dart';
 import 'package:chatapp/providers/AuthProvider.dart';
 import 'package:chatapp/providers/ChatProvider.dart';
@@ -38,14 +39,15 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Barcha platformalarda auth o'zgarishini tinglash
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      if (data.session != null && mounted) {
+      // Seans mavjud bo'lsa va hali navigatsiya boshlanmagan bo'lsa
+      if (data.session != null && mounted && !_isNavigating) {
         _goHome();
       }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final authProvider = context.read<AuthProvider>();
-      if (authProvider.isLoggedIn) {
+      if (authProvider.isLoggedIn && !_isNavigating) {
         _goHome();
       } else {
         await Future.delayed(const Duration(milliseconds: 1500));
@@ -56,8 +58,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _authSub?.cancel(); // Xatoliklarni oldini olish uchun birinchi bo'lib lofni yopamiz
     _ctrl.dispose();
-    _authSub?.cancel();
     super.dispose();
   }
 
@@ -66,8 +68,8 @@ class _SplashScreenState extends State<SplashScreen>
     try {
       final success = await authProvider.signInWithGoogle();
       if (!mounted) return;
-      if (kIsWeb) return; // Web da _authSub orqali navigate bo'ladi
-      if (success) {
+      if (kIsWeb) return;
+      if (success && !_isNavigating) {
         _goHome();
       } else if (authProvider.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -82,25 +84,34 @@ class _SplashScreenState extends State<SplashScreen>
     }
   }
 
-  void _goHome() {
+  void _goHome() async {
     if (_isNavigating || !mounted) return;
     _isNavigating = true;
 
-    // ✅ ASOSIY TUZATISH: ChatProvider ga login qilishni aytamiz
+    // 1. Birinchi navbatda auth tinglovchini to'xtatamiz (boshqa qayta ishlamasligi uchun)
+    await _authSub?.cancel();
+
+    // 2. Supabase'dan user ma'lumotlarini xavfsiz olamiz
     final sbUser = Supabase.instance.client.auth.currentUser;
     if (sbUser != null) {
       final name = sbUser.userMetadata?['full_name'] as String? ??
           sbUser.userMetadata?['name']  as String? ??
           sbUser.email ??
           'Foydalanuvchi';
-      // ChatProvider._me ni o'rnatamiz — bu bo'lmasa HomeScreen bo'sh ko'rinadi
-      context.read<ChatProvider>().login(name);
+
+      // 3. ChatProvider'ga login ma'lumotlarini o'rnatamiz
+      if (mounted) {
+        context.read<ChatProvider>().login(name);
+      }
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
+    // 4. HomeScreen'ga xavfsiz o'tamiz
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
   }
 
   @override

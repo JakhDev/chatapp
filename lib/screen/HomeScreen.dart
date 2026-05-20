@@ -4,7 +4,8 @@ import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/providers/ChatProvider.dart';
 import 'package:chatapp/theme/AppTheme.dart';
 import 'package:chatapp/widgets/AvatarWidget.dart';
-import 'package:chatapp/screen/ChatScreen.dart';
+
+import 'ChatScreen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -50,19 +51,15 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 5),
               const Text(
                 'Onlayn',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                style: TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w500),
               ),
             ]),
           ]),
         ),
-
-        // 👥 RO'YXATDAN O'TGAN USERLARNI KO'RISH TUGMASI
         IconButton(
           icon: const Icon(Icons.people_alt_outlined, color: AppTheme.primary),
           onPressed: () {
-            // Oynani ochishdan oldin barcha userlarni bazadan yuklash
             context.read<ChatProvider>().loadAllUsers();
-
             showModalBottomSheet(
               context: context,
               backgroundColor: AppTheme.surface,
@@ -76,8 +73,6 @@ class _Header extends StatelessWidget {
             );
           },
         ),
-
-        // 🚪 CHIQISH (LOGOUT) TUGMASI
         IconButton(
           icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
           onPressed: () async {
@@ -113,7 +108,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-// 📋 RO'YXATDAN O'TGAN FOYDALANUVCHILAR OYNASI (BOTTOM SHEET)
 class _UserListSheet extends StatelessWidget {
   const _UserListSheet();
 
@@ -123,7 +117,7 @@ class _UserListSheet extends StatelessWidget {
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.75, // Ekranning 75% qismi
+        maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
@@ -155,21 +149,23 @@ class _UserListSheet extends StatelessWidget {
                     leading: AvatarWidget(name: u.name, size: 44, isOnline: u.isOnline),
                     title: Text(u.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
                     onTap: () async {
-                      // 🔄 ESKI: final chat = context.read<ChatProvider>().newPersonal(u);
-                      // 🔥 YANGI: Supabase-dan eski xabarlari bilan yuklash yoki yangi ochish
                       final chat = await context.read<ChatProvider>().fetchOrCreateChat(u);
 
                       if (context.mounted) {
-                        Navigator.pop(context); // Bottom sheet-ni yopish
+                        Navigator.pop(context);
 
-                        // Chat ochilganini xabar qilish (bildirishnomalarni tozalash)
+                        // 🔥 Chat ochilishi bilan unreadCount lokalda 0 bo'ladi
                         context.read<ChatProvider>().openChat(chat.id);
 
-                        // Chat ekraniga yo'l olish
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
-                        );
+                        ).then((_) {
+                          // 🔥 Chat ichidan orqaga qaytganda aktiv oynani yopamiz va UI yangilanadi
+                          if (context.mounted) {
+                            context.read<ChatProvider>().closeChat();
+                          }
+                        });
                       }
                     },
                   );
@@ -233,13 +229,23 @@ class _ChatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isGroup = chat.type == ChatType.group;
-    final time    = _fmt(chat.lastMessageTime);
+    final hasUnread = chat.unreadCount > 0;
 
     return InkWell(
       onTap: () {
+        // 🔥 Chat ochilishi bilan Provider hisoblagichni darhol 0 qiladi
         context.read<ChatProvider>().openChat(chat.id);
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
+        ).then((_) {
+          // 🔥 Foydalanuvchi chat ichidan chiqib orqaga qaytgan paytda,
+          // aktiv chat ID null qilinadi va HomeScreen boshqatdan o'zini yangilaydi.
+          if (context.mounted) {
+            context.read<ChatProvider>().closeChat();
+          }
+        });
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
@@ -268,29 +274,51 @@ class _ChatTile extends StatelessWidget {
                           fontWeight: FontWeight.w600, fontSize: 15),
                       overflow: TextOverflow.ellipsis),
                 ),
-                Text(time,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: chat.unreadCount > 0
-                          ? AppTheme.primary : AppTheme.textSecondary,
-                    )),
+                Text(
+                  _formatChatTime(chat.lastMessageTime),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+                    color: hasUnread ? AppTheme.online : AppTheme.textSecondary.withOpacity(0.6),
+                  ),
+                ),
               ]),
               const SizedBox(height: 4),
               Row(children: [
                 Expanded(
-                  child: Text(chat.lastMessage ?? 'Xabar yo\'q',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                      overflow: TextOverflow.ellipsis, maxLines: 1),
+                  child: Text(
+                    chat.lastMessage ?? 'Xabar yo\'q',
+                    style: TextStyle(
+                      color: hasUnread ? AppTheme.textPrimary : AppTheme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-                if (chat.unreadCount > 0)
+                // 🔥 MODELNING O'ZIDAGI UNREAD_COUNT'NI CHIQARISH
+                if (hasUnread)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: Text('${chat.unreadCount}',
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 11, fontWeight: FontWeight.w700)),
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: AppTheme.online,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 20,
+                      minHeight: 20,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${chat.unreadCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
               ]),
             ]),
@@ -300,12 +328,29 @@ class _ChatTile extends StatelessWidget {
     );
   }
 
-  String _fmt(DateTime? dt) {
-    if (dt == null) return '';
-    final d = DateTime.now().difference(dt);
-    if (d.inMinutes < 1) return 'Hozir';
-    if (d.inHours   < 1) return '${d.inMinutes}d';
-    if (d.inDays    < 1) return '${d.inHours}s';
-    return '${d.inDays}k';
-  }
-}
+  String _formatChatTime(DateTime? dateTime) {
+    if (dateTime == null) return '';
+
+    // 🔥 Vaqtni qurilmaning (O'zbekiston) vaqt zonasiga o'giramiz
+    final localTime = dateTime.toLocal();
+
+    final now = DateTime.now();
+    final difference = now.difference(localTime);
+    if (difference.inMinutes < 1) return 'Hozir';
+
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final msgDate = DateTime(localTime.year, localTime.month, localTime.day);
+
+    if (msgDate == today) {
+      final hour = localTime.hour.toString().padLeft(2, '0');
+      final minute = localTime.minute.toString().padLeft(2, '0');
+      return '$hour:$minute';
+    } else if (msgDate == yesterday) {
+      return 'Kecha';
+    } else {
+      final day = localTime.day.toString().padLeft(2, '0');
+      final month = localTime.month.toString().padLeft(2, '0');
+      return '$day.$month';
+    }
+  }}
