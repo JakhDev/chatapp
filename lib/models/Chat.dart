@@ -33,35 +33,48 @@ class User {
 
 class Message {
   final String      id;
+  final String      chatId;
   final String      senderId;
   final String      senderName;
-  late final String      content;
+  late final String content;
   final MessageType type;
   final DateTime    timestamp;
   bool isRead;
 
   Message({
     required this.id,
+    required this.chatId,
     required this.senderId,
     required this.senderName,
     required this.content,
     this.type      = MessageType.text,
-    required this.timestamp,
+    DateTime?      timestamp,   // ✅ optional — bo'lmasa DateTime.now()
     this.isRead    = false,
-  });
+  }) : timestamp = timestamp ?? DateTime.now();
 
-  factory Message.fromJson(Map<String, dynamic> j) => Message(
-    id:         j['id']         as String,
-    senderId:   j['senderId']   as String,
-    senderName: j['senderName'] as String? ?? '',
-    content:    j['content']    as String,
-    type:       j['type'] == 'image' ? MessageType.image : MessageType.text,
-    timestamp:  DateTime.parse(j['timestamp'] as String),
-    isRead:     j['isRead']     as bool? ?? false,
-  );
+  factory Message.fromJson(Map<String, dynamic> j) {
+    // ✅ timestamp yo'q bo'lsa ham crash bo'lmaydi
+    DateTime ts = DateTime.now();
+    final rawTs = j['timestamp'] as String?;
+    if (rawTs != null && rawTs.isNotEmpty) {
+      ts = DateTime.tryParse(rawTs) ?? DateTime.now();
+    }
+
+    return Message(
+      id:         j['id']?.toString()    ?? '',
+      chatId:     j['chatId']            as String? ?? '',
+      senderId:   j['senderId']          as String? ?? '',
+      senderName: j['senderName']        as String? ?? '',
+      content:    j['content']           as String? ?? '',
+      type:       j['type'] == 'image' ? MessageType.image : MessageType.text,
+      timestamp:  ts,
+      isRead:     j['isRead']            as bool?   ?? false,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id':         id,
+    'chatId':     chatId,
     'senderId':   senderId,
     'senderName': senderName,
     'content':    content,

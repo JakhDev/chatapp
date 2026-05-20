@@ -8,8 +8,7 @@ enum WsStatus { disconnected, connecting, connected, error }
 
 class WebSocketService extends ChangeNotifier {
   // 👇 O'zingizning serveringiz URL ini shu yerga yozing
-  static const String _wsUrl = 'wss://echo.websocket.events';
-
+  final String wsUrl = "ws://localhost:8080";
   WebSocketChannel? _channel;
   WsStatus _status = WsStatus.disconnected;
   StreamSubscription? _sub;
@@ -18,21 +17,21 @@ class WebSocketService extends ChangeNotifier {
 
   final _msgCtrl = StreamController<Message>.broadcast();
 
-  WsStatus get status      => _status;
+  WsStatus        get status    => _status;
   Stream<Message> get msgStream => _msgCtrl.stream;
-  bool get isConnected     => _status == WsStatus.connected;
+  bool            get isConnected => _status == WsStatus.connected;
 
   String? _userId;
 
-  // ── Connect ──────────────────────────────────────────────
+  // ── Connect ───────────────────────────────────────────────────────────────
   Future<void> connect(String userId) async {
     if (_status == WsStatus.connected || _status == WsStatus.connecting) return;
     _userId = userId;
     _setStatus(WsStatus.connecting);
 
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(_wsUrl));
-      await _channel!.ready;           // throws if connection fails
+      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      await _channel!.ready;
       _setStatus(WsStatus.connected);
 
       _sub = _channel!.stream.listen(
@@ -50,13 +49,13 @@ class WebSocketService extends ChangeNotifier {
     }
   }
 
-  // ── Join room ─────────────────────────────────────────────
+  // ── Join room ─────────────────────────────────────────────────────────────
   void joinChat(String chatId) {
     if (!isConnected) return;
     _send({'type': 'join_chat', 'chatId': chatId, 'userId': _userId});
   }
 
-  // ── Send text ─────────────────────────────────────────────
+  // ── Xabar yuborish ────────────────────────────────────────────────────────
   void sendMessage({
     required String chatId,
     required String senderId,
@@ -66,6 +65,7 @@ class WebSocketService extends ChangeNotifier {
   }) {
     final msg = Message(
       id:         '${DateTime.now().millisecondsSinceEpoch}',
+      chatId:     chatId,       // ← YANGI: chatId qo'shildi
       senderId:   senderId,
       senderName: senderName,
       content:    content,
@@ -73,32 +73,52 @@ class WebSocketService extends ChangeNotifier {
       timestamp:  DateTime.now(),
     );
 
-    _send({'type': 'message', 'chatId': chatId, 'message': msg.toJson()});
+    // Serverga yuboramiz — chatId ham message ichida bo'ladi (toJson orqali)
+    _send({
+      'type':    'message',
+      'chatId':  chatId,
+      'message': msg.toJson(),
+    });
 
-    // Echo locally so sender sees their own message immediately
-    _msgCtrl.add(msg);
+    // ❌ Local echo o'chirildi — ChatProvider allaqachon localMsg qo'shadi
+    // _msgCtrl.add(msg);  // Bu dublikatlarga olib kelardi!
   }
 
-  // ── Send image ────────────────────────────────────────────
+  // ── Rasm yuborish ─────────────────────────────────────────────────────────
   void sendImage({
     required String chatId,
     required String senderId,
     required String senderName,
     required String imageUrl,
-  }) => sendMessage(
-    chatId:     chatId,
-    senderId:   senderId,
-    senderName: senderName,
-    content:    imageUrl,
-    type:       MessageType.image,
-  );
+  }) =>
+      sendMessage(
+        chatId:     chatId,
+        senderId:   senderId,
+        senderName: senderName,
+        content:    imageUrl,
+        type:       MessageType.image,
+      );
 
-  // ── Internal ──────────────────────────────────────────────
+  // ── Serverdan kelgan xabarni qayta ishlash ────────────────────────────────
   void _onData(dynamic raw) {
     try {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
+
       if (json['type'] == 'message') {
-        _msgCtrl.add(Message.fromJson(json['message'] as Map<String, dynamic>));
+        final msgJson = json['message'] as Map<String, dynamic>;
+
+        // Agar message ichida chatId yo'q bo'lsa, tashqi chatId ni olamiz
+        if (!msgJson.containsKey('chatId') || (msgJson['chatId'] as String? ?? '').isEmpty) {
+          msgJson['chatId'] = json['chatId'] as String? ?? '';
+        }
+
+        final msg = Message.fromJson(msgJson);
+
+        // Faqat boshqa foydalanuvchilardan kelgan xabarlarni stream ga qo'shamiz
+        // (o'zimizni xabarlarimiz ChatProvider da localMsg sifatida allaqachon bor)
+        if (msg.senderId != _userId) {
+          _msgCtrl.add(msg);
+        }
       }
     } catch (e) {
       debugPrint('WS parse error: $e');
@@ -140,12 +160,17 @@ class WebSocketService extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
+  void disconnect() {
     _sub?.cancel();
     _pingTimer?.cancel();
     _reconnectTimer?.cancel();
     _channel?.sink.close();
+    _setStatus(WsStatus.disconnected);
+  }
+
+  @override
+  void dispose() {
+    disconnect();
     _msgCtrl.close();
     super.dispose();
   }
