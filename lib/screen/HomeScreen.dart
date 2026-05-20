@@ -60,7 +60,7 @@ class _Header extends StatelessWidget {
         IconButton(
           icon: const Icon(Icons.people_alt_outlined, color: AppTheme.primary),
           onPressed: () {
-            // Oynani ochishdan oldin barcha userlarni bazadan yuklaymistan
+            // Oynani ochishdan oldin barcha userlarni bazadan yuklash
             context.read<ChatProvider>().loadAllUsers();
 
             showModalBottomSheet(
@@ -152,16 +152,25 @@ class _UserListSheet extends StatelessWidget {
                   final u = users[index];
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                    leading: AvatarWidget(name: u.name, size: 44, isOnline: false),
+                    leading: AvatarWidget(name: u.name, size: 44, isOnline: u.isOnline),
                     title: Text(u.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-                    onTap: () {
-                      // Bosganda u bilan yangi shaxsiy chat yaratish yoki borini ochish
-                      final chat = context.read<ChatProvider>().newPersonal(u);
-                      Navigator.pop(context); // Oynani yopish
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
-                      );
+                    onTap: () async {
+                      // 🔄 ESKI: final chat = context.read<ChatProvider>().newPersonal(u);
+                      // 🔥 YANGI: Supabase-dan eski xabarlari bilan yuklash yoki yangi ochish
+                      final chat = await context.read<ChatProvider>().fetchOrCreateChat(u);
+
+                      if (context.mounted) {
+                        Navigator.pop(context); // Bottom sheet-ni yopish
+
+                        // Chat ochilganini xabar qilish (bildirishnomalarni tozalash)
+                        context.read<ChatProvider>().openChat(chat.id);
+
+                        // Chat ekraniga yo'l olish
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
+                        );
+                      }
                     },
                   );
                 },

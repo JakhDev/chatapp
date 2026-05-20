@@ -9,17 +9,21 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 class ChatProvider extends ChangeNotifier {
   final WebSocketService _ws;
-  StreamSubscription? _sub;
+  StreamSubscription? _wsSub;
+
+  // ✅ Supabase Realtime obunasi uchun kanal
+  sb.RealtimeChannel? _realtimeChannel;
 
   User?            _me;
   final List<Chat> _chats = [];
-  String _searchQuery = '';
+  String           _searchQuery = '';
+  List<User>       _allUsers = [];
+  String?          _activeChatId; // Hozir ekranda ochiq turgan chat ID-si
 
-  List<User> _allUsers = [];
-  List<User> get allUsers => List.unmodifiable(_allUsers);
+  User?      get currentUser => _me;
+  List<User> get allUsers    => List.unmodifiable(_allUsers);
 
-  User? get currentUser => _me;
-
+  // Qidiruv tizimi filtri bilan chatlar ro'yxati
   List<Chat> get chats {
     if (_searchQuery.isEmpty) return List.unmodifiable(_chats);
     return List.unmodifiable(
@@ -30,8 +34,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   ChatProvider(this._ws) {
-    _sub = _ws.msgStream.listen(_onIncoming);
+    // WebSocket-dan keladigan xabarlarni tinglash
+    _wsSub = _ws.msgStream.listen(_onIncoming);
 
+    // Agar foydalanuvchi tizimda login bo'lgan bo'lsa, avtomat sessiyani tiklash
     final sbUser = sb.Supabase.instance.client.auth.currentUser;
     if (sbUser != null) {
       final name = sbUser.userMetadata?['full_name'] as String? ??
@@ -42,7 +48,7 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // ── Bitta chatning xabarlarini qaytaradi ──────────────────────────────────
+  // ── Bitta chatning barcha xabarlarini qaytarish ────────────────___________
   List<Message> messages(String chatId) {
     final chat = _chats.firstWhere(
           (c) => c.id == chatId,
@@ -58,13 +64,121 @@ class ChatProvider extends ChangeNotifier {
 
   void _loginWithId(String id, String name) {
     _me = User(id: id, name: name, isOnline: true);
+
+    // Serverlarga ulanish
     _ws.connect(_me!.id);
+    _subscribeRealtime();
+
     notifyListeners();
-    _saveUserToDb(id, name);   // ← Foydalanuvchini DB ga saqlash
-    loadOldMessages();
+    _saveUserToDb(id, name);
+    loadOldMessages(); // Barcha eski chat va xabarlarni dastlabki yuklash
   }
 
-  // ── Foydalanuvchini users jadvaliga saqlash (yangi bo'lsa qo'shadi) ───────
+  // ── Supabase Realtime: Yangi xabarlarni jonli tutib olish ────────────────
+  void _subscribeRealtime() {
+    _realtimeChannel?.unsubscribe();
+
+    // Kanallarni aniq va unikal formatda tinglaymiz
+    _realtimeChannel = sb.Supabase.instance.client
+        .channel('public:messages')
+        .onPostgresChanges(
+      event: sb.PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'messages',
+      callback: (payload) {
+        if (kDebugMode) print('🔴 Realtime baza orqali xabar keldi: ${payload.newRecord}');
+        _onRealtimeMessage(payload.newRecord);
+      },
+    );
+
+    _realtimeChannel?.subscribe();
+  }
+
+  // ── Realtime-dan kelgan ma'lumotni modelga o'tkazish ─────────────────────
+  void _onRealtimeMessage(Map<String, dynamic> row) {
+    if (_me == null) return;
+
+    // 🔥 KAFOLATLANGAN PARSING: Bazadagi kichik harfli ustunlarni qo'lda to'g'ri o'qiymiz
+    final String chatId     = row['chatid']     as String? ?? '';
+    final String msgId      = row['id']?.toString() ?? '';
+    final String senderId   = row['senderid']   as String? ?? '';
+    final String senderName = row['sendername'] as String? ?? '';
+    final String content    = row['content']    as String? ?? '';
+
+    if (chatId.isEmpty || content.isEmpty) return;
+
+    final rawTs = row['created_at'] as String? ?? row['timestamp'] as String?;
+    final timestamp = rawTs != null ? DateTime.tryParse(rawTs) ?? DateTime.now() : DateTime.now();
+
+    final isImage = content.startsWith('http') &&
+        (content.contains('.jpg') || content.contains('.png') || content.contains('chat_images'));
+
+    final msg = Message(
+      id:         msgId,
+      chatId:     chatId,
+      senderId:   senderId,
+      senderName: senderName,
+      content:    content,
+      type:       isImage ? MessageType.image : MessageType.text,
+      timestamp:  timestamp,
+    );
+
+    final isMine = msg.senderId == _me!.id;
+    final chatIdx = _chats.indexWhere((c) => c.id == msg.chatId);
+
+    if (chatIdx != -1) {
+      final chat = _chats[chatIdx];
+
+      // Lokal yuklangan vaqtinchalik xabar (echo) dublikatlarini bazadagi real ID bilan almashtirish
+      final localIdx = chat.messages.indexWhere((m) =>
+      m.id.startsWith('local_') &&
+          m.content == msg.content &&
+          m.senderId == msg.senderId);
+
+      if (localIdx != -1) {
+        chat.messages[localIdx] = msg;
+      } else if (!chat.messages.any((m) => m.id == msg.id)) {
+        chat.messages.add(msg);
+      }
+
+      chat.lastMessage = msg.type == MessageType.image ? '📷 Rasm' : msg.content;
+      chat.lastMessageTime = msg.timestamp;
+
+      // Agar oyna ochiq bo'lmasa va xabar boshqa odamdan kelgan bo'lsa, o'qilmagan hisoblanadi
+      if (!isMine && _activeChatId != msg.chatId) {
+
+        chat.unreadCount++;
+      }
+
+    } else {
+      // 🔥 TUZATISH: Chat ID ichidan sherikning haqiqiy ID-sini ajratib olamiz (M-n: "id1_id2")
+      final idList = msg.chatId.split('_');
+      final otherId = idList.first == _me!.id ? idList.last : idList.first;
+
+      // Kontaktdagi foydalanuvchilardan uning ismini qidiramiz
+      final otherUser = _allUsers.firstWhere(
+            (u) => u.id == otherId,
+        orElse: () => User(id: otherId, name: msg.senderName.isNotEmpty ? msg.senderName : 'Foydalanuvchi'),
+      );
+
+      // Agar ro'yxatda yo'q yangi chat bo'lsa, uni suhbatdosh ismi bilan yuqoriga qo'shamiz
+      final newChat = Chat(
+        id:              msg.chatId,
+        name:            otherUser.name, // 👈 'Yozishma' so'zi to'liq olib tashlandi!
+        type:            ChatType.personal,
+        memberIds:       [_me!.id, otherId],
+        messages:        [msg],
+        lastMessage:     msg.type == MessageType.image ? '📷 Rasm' : msg.content,
+        lastMessageTime: msg.timestamp,
+        unreadCount:     (!isMine && _activeChatId != msg.chatId) ? 1 : 0,
+      );
+      _chats.insert(0, newChat);
+    }
+
+    _sortChats();
+    notifyListeners();
+  }
+  // ── Foydalanuvchini ro'yxatdan o'tkazish yoki yangilash ──────────────────
   Future<void> _saveUserToDb(String id, String name) async {
     try {
       final sbUser = sb.Supabase.instance.client.auth.currentUser;
@@ -76,89 +190,127 @@ class ChatProvider extends ChangeNotifier {
         'avatarurl': avatarUrl,
         'isonline':  true,
       }, onConflict: 'id');
-
-      if (kDebugMode) print('✅ Foydalanuvchi users jadvaliga saqlandi');
     } catch (e) {
       if (kDebugMode) print('🚨 _saveUserToDb xatolik: $e');
     }
   }
 
-  // ── Barcha foydalanuvchilarni bazadan yuklash ─────────────────────────────
+  // ── Kontaktdagi barcha foydalanuvchilarni yuklash (o'zidan tashqari) ─────
   Future<void> loadAllUsers() async {
     if (_me == null) return;
     try {
       final List<dynamic> data = await sb.Supabase.instance.client
           .from('users')
-          .select('id, name, avatarurl, isonline');
+          .select('id, name, avatarurl, isonline')
+          .neq('id', _me!.id);
 
-      _allUsers = data.map((row) {
-        return User(
-          id:        row['id']        as String? ?? '',
-          name:      row['name']      as String? ?? 'Foydalanuvchi',
-          avatarUrl: row['avatarurl'] as String? ?? '',
-          isOnline:  row['isonline']  as bool?   ?? false,
-        );
-      }).where((u) => u.id != _me!.id).toList();
-
-      if (kDebugMode) print('🚀 Yuklangan userlar: ${_allUsers.length}');
+      _allUsers = data.map((row) => User.fromJson(row)).toList();
       notifyListeners();
     } catch (e) {
       if (kDebugMode) print('🚨 loadAllUsers xatolik: $e');
     }
   }
 
-  // ── Yangi shaxsiy chat ochish yoki mavjudini topish ───────────────────────
-  Chat newPersonal(User other) {
-    final ids    = [_me!.id, other.id]..sort();
+  // ── AQLLI FUNKSIYA: Chatga kirganda eski xabarlarni bazadan tortish ──────
+  Future<Chat> fetchOrCreateChat(User other) async {
+    final ids = [_me!.id, other.id]..sort();
     final chatId = '${ids[0]}_${ids[1]}';
 
-    final existing = _chats.where((c) => c.id == chatId);
-    if (existing.isNotEmpty) return existing.first;
+    final existingIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (existingIdx != -1 && _chats[existingIdx].messages.isNotEmpty) {
+      return _chats[existingIdx];
+    }
 
-    final chat = Chat(
-      id:        chatId,
-      name:      other.name,
-      type:      ChatType.personal,
-      memberIds: [_me!.id, other.id],
-      messages:  [],
-    );
-    _chats.insert(0, chat);
-    notifyListeners();
-    return chat;
-  }
+    Chat currentChat;
+    if (existingIdx != -1) {
+      currentChat = _chats[existingIdx];
+    } else {
+      currentChat = Chat(
+        id:        chatId,
+        name:      other.name,
+        type:      ChatType.personal,
+        memberIds: [_me!.id, other.id],
+        messages:  [],
+      );
+      _chats.insert(0, currentChat);
+    }
 
-  // ── Eski xabarlarni Supabase dan yuklash ─────────────────────────────────
-  Future<void> loadOldMessages() async {
-    if (_me == null) return;
     try {
       final List<dynamic> data = await sb.Supabase.instance.client
           .from('messages')
           .select()
-          .order('id', ascending: true);   // ✅ created_at yo'q, id bo'yicha
+          .eq('chatid', chatId)
+          .order('created_at', ascending: true);
+
+      if (data.isNotEmpty) {
+        currentChat.messages.clear();
+        for (final row in data) {
+          final content = row['content'] as String? ?? '';
+          final isImage = content.startsWith('http') &&
+              (content.contains('.jpg') || content.contains('.png') || content.contains('chat_images'));
+
+          final rawTs = row['created_at'] as String?;
+          final timestamp = rawTs != null ? DateTime.tryParse(rawTs) ?? DateTime.now() : DateTime.now();
+
+          currentChat.messages.add(Message(
+            id:         row['id']?.toString() ?? '',
+            chatId:     chatId,
+            senderId:   row['senderid'] as String? ?? '',
+            senderName: row['sendername'] as String? ?? '',
+            content:    content,
+            type:       isImage ? MessageType.image : MessageType.text,
+            timestamp:  timestamp,
+          ));
+        }
+        final lastMsg = currentChat.messages.last;
+        currentChat.lastMessage = lastMsg.type == MessageType.image ? '📷 Rasm' : lastMsg.content;
+        currentChat.lastMessageTime = lastMsg.timestamp;
+      }
+    } catch (e) {
+      if (kDebugMode) print('🚨 fetchOrCreateChat xatolik: $e');
+    }
+
+    _sortChats();
+    notifyListeners();
+    return currentChat;
+  }
+
+  // ── Ilova ilk marta yonganida barcha eski xabarlarni yuklash ──────────────
+  Future<void> loadOldMessages() async {
+    if (_me == null) return;
+    try {
+      // 1. Avval bazadagi barcha userlarni ID va Name xaritasi ko'rinishida olamiz
+      final List<dynamic> usersData = await sb.Supabase.instance.client
+          .from('users')
+          .select('id, name');
+
+      final Map<String, String> userNames = {
+        for (var u in usersData) u['id'] as String : u['name'] as String? ?? 'Foydalanuvchi'
+      };
+
+      // 2. Endi eski xabarlarni yuklaymiz
+      final List<dynamic> data = await sb.Supabase.instance.client
+          .from('messages')
+          .select()
+          .order('created_at', ascending: true);
 
       _chats.clear();
 
       for (final row in data) {
-        final String chatId      = row['chatid']     as String? ?? '';
-        final String senderId    = row['senderid']   as String? ?? '';
-        final String senderName  = row['sendername'] as String? ?? 'Foydalanuvchi';
-        final String content     = row['content']    as String? ?? '';
-
+        final String chatId     = row['chatid']     as String? ?? '';
+        final String senderId   = row['senderid']   as String? ?? '';
+        final String senderName = row['sendername'] as String? ?? '';
+        final String content    = row['content']    as String? ?? '';
         if (chatId.isEmpty) continue;
 
-        // ✅ created_at bo'lmasa DateTime.now() ishlatiladi
-        final rawTs    = row['created_at'] as String?;
-        final timestamp = (rawTs != null && rawTs.isNotEmpty)
-            ? DateTime.tryParse(rawTs) ?? DateTime.now()
-            : DateTime.now();
+        final rawTs = row['created_at'] as String? ?? row['timestamp'] as String?;
+        final timestamp = rawTs != null ? DateTime.tryParse(rawTs) ?? DateTime.now() : DateTime.now();
 
         final isImage = content.startsWith('http') &&
-            (content.contains('.jpg') ||
-                content.contains('.png') ||
-                content.contains('chat_images'));
+            (content.contains('.jpg') || content.contains('.png') || content.contains('chat_images'));
 
         final msg = Message(
-          id:         row['id']?.toString() ?? 'msg_${timestamp.millisecondsSinceEpoch}',
+          id:         row['id']?.toString() ?? '',
           chatId:     chatId,
           senderId:   senderId,
           senderName: senderName,
@@ -167,52 +319,52 @@ class ChatProvider extends ChangeNotifier {
           timestamp:  timestamp,
         );
 
-        int chatIdx = _chats.indexWhere((c) => c.id == chatId);
+        int chatIdx = _chats.indexWhere((c) => c.id == msg.chatId);
         if (chatIdx == -1) {
-          final chatName = senderId == _me!.id ? 'Yozishma' : senderName;
-          final newChat  = Chat(
-            id:        chatId,
-            name:      chatName,
-            type:      ChatType.personal,
-            memberIds: [_me!.id, senderId],
-            messages:  [],
-          );
-          _chats.add(newChat);
-          chatIdx = _chats.length - 1;
-        } else {
-          final chat = _chats[chatIdx];
-          if (chat.name == 'Yozishma' && senderId != _me!.id) {
-            _chats[chatIdx] = Chat(
-              id:              chat.id,
-              name:            senderName,
-              type:            chat.type,
-              memberIds:       chat.memberIds,
-              messages:        chat.messages,
-              lastMessage:     chat.lastMessage,
-              lastMessageTime: chat.lastMessageTime,
-              unreadCount:     chat.unreadCount,
-            );
+          // 🎯 SHU YERDA TUZATISH: Chat ID ichidan suhbatdoshning haqiqiy ID-sini ajratib olamiz
+          // Masalan: "userA_userB" formatidan o'zimiznikidan boshqasini topamiz
+          final idList = chatId.split('_');
+          String otherId = _me!.id;
+          if (idList.length >= 2) {
+            otherId = idList.first == _me!.id ? idList.last : idList.first;
+          } else {
+            otherId = msg.senderId == _me!.id ? _me!.id : msg.senderId;
           }
+
+          // 'Yozishma' so'zi batamom olib tashlandi. Ismni userNames xaritadan aniq o'qiydi!
+          final chatName = userNames[otherId] ??
+              (msg.senderId == _me!.id ? 'Foydalanuvchi' : msg.senderName);
+
+          _chats.add(Chat(
+            id:        msg.chatId,
+            name:      chatName.isNotEmpty ? chatName : 'Foydalanuvchi',
+            type:      ChatType.personal,
+            memberIds: [_me!.id, otherId],
+            messages:  [],
+          ));
+          chatIdx = _chats.length - 1;
         }
 
         final currentChat = _chats[chatIdx];
         if (!currentChat.messages.any((m) => m.id == msg.id)) {
           currentChat.messages.add(msg);
         }
-        currentChat.lastMessage     = msg.type == MessageType.image ? '📷 Rasm' : msg.content;
+        currentChat.lastMessage = msg.type == MessageType.image ? '📷 Rasm' : msg.content;
         currentChat.lastMessageTime = msg.timestamp;
       }
 
-      _chats.sort((a, b) =>
-          (b.lastMessageTime ?? DateTime(0)).compareTo(a.lastMessageTime ?? DateTime(0)));
+      for (var chat in _chats) {
+        chat.messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      }
+
+      _sortChats();
       notifyListeners();
     } catch (e) {
-      if (kDebugMode) print('🚨 loadOldMessages xatolik: $e');
+      if (kDebugMode) print('🚨 loadOldMessages xatoligi: $e');
     }
   }
-
-  // ── Chat ochilganda o'qilmagan xabarlarni nolga tushirish ─────────────────
   void openChat(String chatId) {
+    _activeChatId = chatId; // Aktiv oyna belgilandi
     _ws.joinChat(chatId);
     final i = _chats.indexWhere((c) => c.id == chatId);
     if (i != -1) {
@@ -221,13 +373,19 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  // Chat ekrandan yopilganda chaqiriladi
+  void closeChat() {
+    _activeChatId = null;
+  }
+
   void setSearchQuery(String query) {
     _searchQuery = query;
     notifyListeners();
   }
 
-  // ── Matn xabar yuborish ───────────────────────────────────────────────────
-  Future<void> sendText(String chatId, String text, BuildContext context) async {
+  // ── Matn yuborish ─────────────────────────────────────────────────────────
+// ── Matn yuborish (Tuzatilgan varianti) ───────────────────────────────────
+  Future<void> sendText(String chatId, String text, String chatName, BuildContext context) async {
     if (_me == null || text.trim().isEmpty) return;
 
     final cleanText = text.trim();
@@ -245,18 +403,18 @@ class ChatProvider extends ChangeNotifier {
 
     int i = _chats.indexWhere((c) => c.id == chatId);
     if (i == -1) {
-      final newChat = Chat(
-        id:        chatId,
-        name:      'Yozishma',
-        type:      ChatType.personal,
-        memberIds: [_me!.id],
-        messages:  [],
-      );
-      _chats.insert(0, newChat);
+      // 🔥 TUZATISH: Endi 'Yozishma' emas, ChatScreen'dan kelgan real ism qo'yiladi!
+      _chats.insert(0, Chat(
+          id: chatId,
+          name: chatName,
+          type: ChatType.personal,
+          memberIds: [_me!.id]
+      ));
       i = 0;
     }
     _addMsgAndFormat(_chats[i], localMsg);
 
+    // 1. WebSocket orqali sherikka xabar berish
     _ws.sendMessage(
       chatId:     chatId,
       senderId:   _me!.id,
@@ -264,25 +422,27 @@ class ChatProvider extends ChangeNotifier {
       content:    cleanText,
     );
 
+    // 2. Supabase bazasiga yozish
     try {
       await sb.Supabase.instance.client.from('messages').insert({
         'chatid':     chatId,
         'senderid':   _me!.id,
         'sendername': _me!.name,
         'content':    cleanText,
+        'type':       'text'
       });
     } catch (e) {
       if (kDebugMode) print('🚨 sendText xatolik: $e');
     }
   }
-
   // ── Rasm yuborish ─────────────────────────────────────────────────────────
-  Future<void> sendImage(String chatId, String filePath, BuildContext context) async {
+// ── Rasm yuborish (Tuzatilgan varianti) ───────────────────────────────────
+  Future<void> sendImage(String chatId, String filePath, String chatName, BuildContext context) async {
     if (_me == null || filePath.isEmpty) return;
 
     final file     = File(filePath);
     final timeNow  = DateTime.now();
-    final fileName = '${timeNow.millisecondsSinceEpoch}.jpg';
+    final fileName = '${_me!.id}_${timeNow.millisecondsSinceEpoch}.jpg';
 
     final localMsg = Message(
       id:         'local_img_${timeNow.millisecondsSinceEpoch}',
@@ -296,123 +456,122 @@ class ChatProvider extends ChangeNotifier {
 
     int i = _chats.indexWhere((c) => c.id == chatId);
     if (i == -1) {
-      final newChat = Chat(
-        id:        chatId,
-        name:      'Yozishma',
-        type:      ChatType.personal,
-        memberIds: [_me!.id],
-        messages:  [],
-      );
-      _chats.insert(0, newChat);
+      // 🔥 TUZATISH: Endi rasm yuborilganda ham 'Yozishma' emas, real ism qo'yiladi!
+      _chats.insert(0, Chat(
+          id: chatId,
+          name: chatName,
+          type: ChatType.personal,
+          memberIds: [_me!.id]
+      ));
       i = 0;
     }
     _addMsgAndFormat(_chats[i], localMsg);
 
     try {
-      await sb.Supabase.instance.client.storage
-          .from('chat_images')
-          .upload(fileName, file);
+      // Storage-ga rasm yuklash
+      await sb.Supabase.instance.client.storage.from('chat_images').upload(fileName, file);
+      final publicUrl = sb.Supabase.instance.client.storage.from('chat_images').getPublicUrl(fileName);
 
-      final publicUrl = sb.Supabase.instance.client.storage
-          .from('chat_images')
-          .getPublicUrl(fileName);
+      // WebSocket orqali yuborish
+      _ws.sendMessage(chatId: chatId, senderId: _me!.id, senderName: _me!.name, content: publicUrl, type: MessageType.image);
 
-      _ws.sendMessage(
-        chatId:     chatId,
-        senderId:   _me!.id,
-        senderName: _me!.name,
-        content:    publicUrl,
-      );
-
+      // Bazaga yozish
       await sb.Supabase.instance.client.from('messages').insert({
         'chatid':     chatId,
         'senderid':   _me!.id,
         'sendername': _me!.name,
         'content':    publicUrl,
+        'type':       'image'
       });
     } catch (e) {
       if (kDebugMode) print('🚨 sendImage xatolik: $e');
     }
   }
-
-  // ── Logout ────────────────────────────────────────────────────────────────
+  // ── Tizimdan chiqish (Logout) ─────────────────────────────────────────────
   Future<void> logout() async {
     try {
-      // Bazada isonline = false qilamiz
       if (_me != null) {
-        await sb.Supabase.instance.client
-            .from('users')
-            .update({'isonline': false})
-            .eq('id', _me!.id);
+        await sb.Supabase.instance.client.from('users').update({'isonline': false}).eq('id', _me!.id);
       }
+
+      _realtimeChannel?.unsubscribe();
+      _realtimeChannel = null;
 
       await sb.Supabase.instance.client.auth.signOut();
       try {
-        final g = GoogleSignIn();
-        await g.signOut();
-        await g.disconnect();
+        await GoogleSignIn().signOut();
+        await GoogleSignIn().disconnect();
       } catch (_) {}
 
-      await _sub?.cancel();
-      _sub = null;
+      await _wsSub?.cancel();
+      _wsSub = null;
       try { (_ws as dynamic).disconnect(); } catch (_) {}
 
       _me = null;
       _chats.clear();
       _allUsers.clear();
       _searchQuery = '';
+      _activeChatId = null;
       notifyListeners();
     } catch (e) {
       if (kDebugMode) print('🚨 logout xatolik: $e');
     }
   }
 
-  // ── WebSocket orqali kelgan xabarni qabul qilish ──────────────────────────
+  // ── WebSocket oqimidan (Stream) kelgan yangi xabar ───────────────────────
   void _onIncoming(Message msg) {
-    final targetChatId = msg.chatId;
-    if (targetChatId.isEmpty) return;
+    if (msg.chatId.isEmpty) return;
 
-    final isMine    = msg.senderId == _me?.id;
-    final chatIndex = _chats.indexWhere((c) => c.id == targetChatId);
-
-    if (chatIndex != -1) {
-      final currentChat = _chats[chatIndex];
-      final isDuplicate = currentChat.messages.any((m) =>
-      m.content  == msg.content &&
-          m.senderId == msg.senderId &&
-          (m.id == msg.id || m.id.startsWith('local_')));
+    final chatIdx = _chats.indexWhere((c) => c.id == msg.chatId);
+    if (chatIdx != -1) {
+      final chat = _chats[chatIdx];
+      final isDuplicate = chat.messages.any((m) =>
+      m.id == msg.id ||
+          (m.content == msg.content && m.senderId == msg.senderId && m.id.startsWith('local_')));
 
       if (!isDuplicate) {
-        _addMsgAndFormat(currentChat, msg);
+        _addMsgAndFormat(chat, msg);
+        if (msg.senderId != _me?.id && _activeChatId != msg.chatId) {
+          chat.unreadCount++;
+          notifyListeners();
+        }
       }
-    } else if (!isMine) {
+    } else if (msg.senderId != _me?.id) {
       final newChat = Chat(
-        id:        targetChatId,
-        name:      msg.senderName.isNotEmpty ? msg.senderName : 'Foydalanuvchi',
-        type:      ChatType.personal,
-        memberIds: [_me?.id ?? '', msg.senderId],
-        messages:  [],
+        id:              msg.chatId,
+        name:            msg.senderName.isNotEmpty ? msg.senderName : 'Foydalanuvchi',
+        type:            ChatType.personal,
+        memberIds:       [_me?.id ?? '', msg.senderId],
+        messages:        [msg],
+        lastMessage:     msg.type == MessageType.image ? '📷 Rasm' : msg.content,
+        lastMessageTime: msg.timestamp,
+        unreadCount:     _activeChatId != msg.chatId ? 1 : 0,
       );
       _chats.insert(0, newChat);
-      _addMsgAndFormat(newChat, msg);
+      _sortChats();
+      notifyListeners();
     }
   }
 
-  // ── Yordamchi: xabar qo'shish va chatni yangilash ─────────────────────────
   void _addMsgAndFormat(Chat chat, Message msg) {
     if (!chat.messages.any((m) => m.id == msg.id)) {
       chat.messages.add(msg);
     }
     chat.lastMessage     = msg.type == MessageType.image ? '📷 Rasm' : msg.content;
     chat.lastMessageTime = msg.timestamp;
+    _sortChats();
+    notifyListeners();
+  }
+
+  void _sortChats() {
     _chats.sort((a, b) =>
         (b.lastMessageTime ?? DateTime(0)).compareTo(a.lastMessageTime ?? DateTime(0)));
-    notifyListeners();
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _wsSub?.cancel();
+    _realtimeChannel?.unsubscribe();
     super.dispose();
   }
 }

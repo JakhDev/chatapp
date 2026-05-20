@@ -6,7 +6,7 @@ import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/providers/ChatProvider.dart';
 import 'package:chatapp/theme/AppTheme.dart';
 import 'package:chatapp/widgets/AvatarWidget.dart';
-import 'package:chatapp/widgets/MessageBuble.dart'; // Fayl nomi MessageBubble bo'lsa MessageBuble qilib import qilingan
+import 'package:chatapp/widgets/MessageBuble.dart'; // Sizning loyihadagi import fayl nomi
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
@@ -20,6 +20,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollCtrl = ScrollController();
   final _picker = ImagePicker();
   bool _typing = false;
+  int _oldMsgCount = 0; // Yangi xabarlar kelganini solishtirish uchun profilaktika
 
   @override
   void initState() {
@@ -27,8 +28,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _textCtrl.addListener(
             () => setState(() => _typing = _textCtrl.text.trim().isNotEmpty));
 
-    // Oyna ochilishi bilan xabarlar ro'yxatini eng pastga tushiramiz
-    WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom(isAnimated: false));
+    // Oyna ochilgandan 100ms keyin bazadan eski xabarlar yuklanib bo'lingach, eng pastga tushadi
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _toBottom(isAnimated: false);
+      });
+    });
   }
 
   @override
@@ -42,31 +47,37 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
 
-    // Provayderga context muvaffaqiyatli uzatildi
-    context.read<ChatProvider>().sendText(widget.chat.id, text, context);
+    // To'g'ri tartib: chatId, text, chatName, context
+    context.read<ChatProvider>().sendText(
+      widget.chat.id,
+      text,
+      widget.chat.name, // Chatning haqiqiy ismi (Yozishma so'zini yo'qotish uchun)
+      context,          // n harfi bilan to'g'ri yozilgan context
+    );
 
     _textCtrl.clear();
     _toBottom(isAnimated: true);
   }
 
   Future<void> _pickImage() async {
-    final src = await showModalBottomSheet<ImageSource>(
+    // Navigator.pop dan keladigan qiymatni xavfsiz olish
+    final ImageSource? src = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
+      builder: (ctx) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined, color: AppTheme.primary),
             title: const Text('Kamera', style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(context, ImageSource.camera),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined, color: AppTheme.accent),
             title: const Text('Galereya', style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(context, ImageSource.gallery),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
           ),
         ]),
       ),
@@ -76,23 +87,32 @@ class _ChatScreenState extends State<ChatScreen> {
     final file = await _picker.pickImage(source: src, imageQuality: 80);
     if (file == null || !mounted) return;
 
-    // 🔥 MUHIM TUZATISH: Provayderga uchinchi argument sifatida `context` uzatildi!
-    context.read<ChatProvider>().sendImage(widget.chat.id, file.path, context);
-
-    _toBottom(isAnimated: true);
+    if (file != null) {
+      // 🔥 TO'G'RI TARTIB: chatId, filePath, chatName, context
+      context.read<ChatProvider>().sendImage(
+        widget.chat.id,
+        file.path,
+        widget.chat.name, // Chatning haqiqiy ismi (Jakhongir M)
+        context,          // n harfi bilan to'g'ri yozilgan context
+      );
+    }    _toBottom(isAnimated: true);
   }
 
+  // Scrollni pastga tushirish funksiyasi mukammallashtirildi
   void _toBottom({bool isAnimated = true}) {
+    if (!mounted || !_scrollCtrl.hasClients) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
+        final maxScroll = _scrollCtrl.position.maxScrollExtent;
         if (isAnimated) {
           _scrollCtrl.animateTo(
-            _scrollCtrl.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
+            maxScroll,
+            duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
           );
         } else {
-          _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+          _scrollCtrl.jumpTo(maxScroll);
         }
       }
     });
@@ -105,8 +125,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final myId = provider.currentUser?.id ?? '';
     final isGroup = widget.chat.type == ChatType.group;
 
-    // Har safar yangi xabar kelganda avtomatik pastga tushish mantiqi
-    WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom(isAnimated: true));
+    // 🔥 XAVFSIZ REALTIME SCROLL: Faqat yangi xabar kelgandagina pastga tushadi, cheksiz sikl bermaydi!
+    if (msgs.length != _oldMsgCount) {
+      _oldMsgCount = msgs.length;
+      _toBottom(isAnimated: true);
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -146,7 +169,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(), // Ekranni bosganda klaviatura yopiladi
+        onTap: () => FocusScope.of(context).unfocus(),
         child: Column(children: [
           Expanded(
             child: msgs.isEmpty
@@ -236,8 +259,8 @@ class _InputBar extends StatelessWidget {
             maxLines: 4,
             minLines: 1,
             textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.send, // Klaviaturada jo'natish belgisi
-            onSubmitted: (_) => onSend(), // Enter bosilganda ham ketadi
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => onSend(),
             decoration: InputDecoration(
               hintText: 'Xabar yozing...',
               filled: true,

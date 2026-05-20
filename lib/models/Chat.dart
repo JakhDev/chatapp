@@ -17,17 +17,17 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> j) => User(
-    id:        j['id']        as String,
-    name:      j['name']      as String,
-    avatarUrl: j['avatarUrl'] as String? ?? '',
-    isOnline:  j['isOnline']  as bool?   ?? false,
+    id:        j['id']        as String? ?? '',
+    name:      j['name']      as String? ?? 'Foydalanuvchi',
+    avatarUrl: j['avatarurl'] as String? ?? j['avatarUrl'] as String? ?? '', // Ham kichik, ham katta harf uchun xavfsizlik
+    isOnline:  j['isonline']  as bool?   ?? j['isOnline']  as bool?   ?? false,
   );
 
   Map<String, dynamic> toJson() => {
     'id':        id,
     'name':      name,
-    'avatarUrl': avatarUrl,
-    'isOnline':  isOnline,
+    'avatarurl': avatarUrl,
+    'isonline':  isOnline,
   };
 }
 
@@ -48,39 +48,38 @@ class Message {
     required this.senderName,
     required this.content,
     this.type      = MessageType.text,
-    DateTime?      timestamp,   // ✅ optional — bo'lmasa DateTime.now()
+    DateTime?      timestamp,
     this.isRead    = false,
   }) : timestamp = timestamp ?? DateTime.now();
 
   factory Message.fromJson(Map<String, dynamic> j) {
-    // ✅ timestamp yo'q bo'lsa ham crash bo'lmaydi
     DateTime ts = DateTime.now();
-    final rawTs = j['timestamp'] as String?;
+    // Supabase odatda 'created_at' qaytaradi, agar u bo'lmasa 'timestamp' ni tekshiradi
+    final rawTs = (j['created_at'] ?? j['timestamp']) as String?;
     if (rawTs != null && rawTs.isNotEmpty) {
       ts = DateTime.tryParse(rawTs) ?? DateTime.now();
     }
 
     return Message(
       id:         j['id']?.toString()    ?? '',
-      chatId:     j['chatId']            as String? ?? '',
-      senderId:   j['senderId']          as String? ?? '',
-      senderName: j['senderName']        as String? ?? '',
+      chatId:     (j['chatid'] ?? j['chatId']) as String? ?? '',       // Supabase va lokal uchun xavfsiz mapping
+      senderId:   (j['senderid'] ?? j['senderId']) as String? ?? '',
+      senderName: (j['sendername'] ?? j['senderName']) as String? ?? '',
       content:    j['content']           as String? ?? '',
       type:       j['type'] == 'image' ? MessageType.image : MessageType.text,
       timestamp:  ts,
-      isRead:     j['isRead']            as bool?   ?? false,
+      isRead:     (j['is_read'] ?? j['isRead']) as bool? ?? false,
     );
   }
 
+  // Supabase-ga to'g'ridan-to'g'ri insert qilish uchun kalitlar kichik harfda
   Map<String, dynamic> toJson() => {
-    'id':         id,
-    'chatId':     chatId,
-    'senderId':   senderId,
-    'senderName': senderName,
+    'chatid':     chatId,
+    'senderid':   senderId,
+    'sendername': senderName,
     'content':    content,
     'type':       type == MessageType.image ? 'image' : 'text',
-    'timestamp':  timestamp.toIso8601String(),
-    'isRead':     isRead,
+    // 'id' va 'created_at' ni Supabase o'zi avtomat yaratadi, shuning uchun bu yerga shart emas
   };
 }
 
