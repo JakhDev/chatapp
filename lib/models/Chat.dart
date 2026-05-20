@@ -1,7 +1,8 @@
+import 'package:flutter/material.dart';
+
 enum MessageType { text, image }
 enum ChatType    { personal, group }
 
-// ─────────────────────────────────────────
 class User {
   final String id;
   final String name;
@@ -30,12 +31,11 @@ class User {
   };
 }
 
-// ─────────────────────────────────────────
 class Message {
   final String      id;
   final String      senderId;
   final String      senderName;
-  final String      content;
+  late final String      content;
   final MessageType type;
   final DateTime    timestamp;
   bool isRead;
@@ -71,7 +71,6 @@ class Message {
   };
 }
 
-// ─────────────────────────────────────────
 class Chat {
   final String        id;
   final String        name;

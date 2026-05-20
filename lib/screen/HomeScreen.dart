@@ -1,306 +1,475 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
+
 import 'package:chatapp/models/Chat.dart';
+
 import 'package:chatapp/providers/ChatProvider.dart';
-import 'package:chatapp/services/WebSocketService.dart';
+
+import 'package:chatapp/providers/AuthProvider.dart';
+
 import 'package:chatapp/theme/AppTheme.dart';
+
 import 'package:chatapp/widgets/AvatarWidget.dart';
+
 import 'package:chatapp/screen/ChatScreen.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+
+
 class HomeScreen extends StatelessWidget {
+
   const HomeScreen({super.key});
 
+
+
   @override
+
   Widget build(BuildContext context) {
+
     return Scaffold(
+
       backgroundColor: AppTheme.background,
+
       body: SafeArea(
+
         child: Column(children: [
-          _Header(),
+
+          const _Header(),
+
           _SearchBar(),
+
           const Expanded(child: _ChatList()),
+
         ]),
+
       ),
+
       floatingActionButton: FloatingActionButton(
+
         backgroundColor: AppTheme.primary,
+
         onPressed: () => _showNewChatSheet(context),
+
         child: const Icon(Icons.edit_outlined, color: Colors.white),
+
       ),
+
     );
+
   }
+
+
 
   void _showNewChatSheet(BuildContext context) {
+
+    final chatProvider = context.read<ChatProvider>();
+
     showModalBottomSheet(
+
       context: context,
+
       backgroundColor: AppTheme.surface,
+
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+
       builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<ChatProvider>(),
-        child: _NewChatSheet(),
+
+        value: chatProvider,
+
+        child: const _NewChatSheet(),
+
       ),
+
     );
+
   }
+
 }
+
+
 
 class _Header extends StatelessWidget {
+
+  const _Header();
+
+
+
   @override
+
   Widget build(BuildContext context) {
-    final user     = context.watch<ChatProvider>().currentUser;
-    final wsStatus = context.watch<WebSocketService>().status;
+
+    final auth = context.watch<AuthProvider>();
+
+
 
     return Padding(
+
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+
       child: Row(children: [
-        AvatarWidget(name: user?.name ?? 'U', size: 42, isOnline: true),
+
+        AvatarWidget(name: auth.userName, size: 42, isOnline: true),
+
         const SizedBox(width: 12),
+
         Expanded(
+
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(user?.name ?? '',
-                style: const TextStyle(color: AppTheme.textPrimary,
-                    fontSize: 17, fontWeight: FontWeight.w700)),
+
+            Text(auth.userName, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+
             Row(children: [
-              Container(
-                width: 7, height: 7,
-                decoration: BoxDecoration(
-                  color: wsStatus == WsStatus.connected
-                      ? AppTheme.online : AppTheme.offline,
-                  shape: BoxShape.circle,
-                ),
-              ),
+
+              Container(width: 7, height: 7, decoration: const BoxDecoration(color: AppTheme.online, shape: BoxShape.circle)),
+
               const SizedBox(width: 5),
-              Text(
-                wsStatus == WsStatus.connected ? 'Ulangan' : 'Ulanmoqda...',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
+
+              const Text('Ulangan (Supabase)', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+
             ]),
+
           ]),
+
         ),
+
         IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: AppTheme.textSecondary),
-          onPressed: () {},
+
+          icon: const Icon(Icons.logout_rounded, color: AppTheme.textSecondary),
+
+          onPressed: () async {
+
+            final navigator = Navigator.of(context);
+
+            await context.read<AuthProvider>().signOut();
+
+            navigator.pushReplacementNamed('/splash');
+
+          },
+
         ),
+
       ]),
+
     );
+
   }
+
 }
+
+
 
 class _SearchBar extends StatelessWidget {
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-    child: TextField(
-      style: const TextStyle(color: AppTheme.textPrimary),
-      decoration: InputDecoration(
-        hintText: 'Qidirish...',
-        prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
-        filled: true,
-        fillColor: AppTheme.surfaceLight,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+
+  Widget build(BuildContext context) {
+
+    return Padding(
+
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+
+      child: TextField(
+
+        style: const TextStyle(color: AppTheme.textPrimary),
+
+        onChanged: (value) {
+
+// Qidiruv matni o'zgarganda provayderni filtrlash
+
+          context.read<ChatProvider>().setSearchQuery(value);
+
+        },
+
+        decoration: InputDecoration(
+
+          hintText: 'Qidirish...',
+
+          prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+
+          filled: true,
+
+          fillColor: AppTheme.surfaceLight,
+
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+
+        ),
+
       ),
-    ),
-  );
+
+    );
+
+  }
+
 }
+
+
 
 class _ChatList extends StatelessWidget {
+
   const _ChatList();
 
+
+
   @override
+
   Widget build(BuildContext context) {
+
     final chats = context.watch<ChatProvider>().chats;
+
     if (chats.isEmpty) {
+
       return const Center(
+
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+
           Icon(Icons.chat_bubble_outline, size: 60, color: AppTheme.textSecondary),
+
           SizedBox(height: 14),
-          Text('Hali chatlar yo\'q',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
-          SizedBox(height: 6),
-          Text('+ tugmasini bosib boshlang',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+
+          Text('Chatlar topilmadi', style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+
         ]),
+
       );
+
     }
+
     return ListView.builder(
+
       padding: const EdgeInsets.only(top: 4, bottom: 80),
+
       itemCount: chats.length,
+
       itemBuilder: (_, i) => _ChatTile(chat: chats[i]),
+
     );
+
   }
+
 }
+
+
 
 class _ChatTile extends StatelessWidget {
+
   final Chat chat;
+
   const _ChatTile({required this.chat});
 
+
+
   @override
+
   Widget build(BuildContext context) {
+
     final isGroup = chat.type == ChatType.group;
-    final time    = _fmt(chat.lastMessageTime);
+
+
 
     return InkWell(
+
       onTap: () {
-        context.read<ChatProvider>().openChat(chat.id);
-        Navigator.push(context,
-            MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
+
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
+
       },
+
       child: Padding(
+
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+
         child: Row(children: [
-          Stack(children: [
-            AvatarWidget(name: chat.name, size: 52, isGroup: isGroup, isOnline: !isGroup),
-            if (!isGroup)
-              Positioned(
-                bottom: 2, right: 2,
-                child: Container(
-                  width: 12, height: 12,
-                  decoration: BoxDecoration(
-                    color: AppTheme.online, shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.background, width: 2),
-                  ),
-                ),
-              ),
-          ]),
+
+          AvatarWidget(name: chat.name, size: 52, isGroup: isGroup, isOnline: !isGroup),
+
           const SizedBox(width: 14),
+
           Expanded(
+
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(
-                  child: Text(chat.name,
-                      style: const TextStyle(color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600, fontSize: 15),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                Text(time,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: chat.unreadCount > 0
-                          ? AppTheme.primary : AppTheme.textSecondary,
-                    )),
-              ]),
+
+              Text(chat.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+
               const SizedBox(height: 4),
-              Row(children: [
-                Expanded(
-                  child: Text(chat.lastMessage ?? 'Xabar yo\'q',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                      overflow: TextOverflow.ellipsis, maxLines: 1),
-                ),
-                if (chat.unreadCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: Text('${chat.unreadCount}',
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 11, fontWeight: FontWeight.w700)),
-                  ),
-              ]),
+
+              Text(chat.lastMessage ?? 'Xabar yozish uchun bosing...', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+
             ]),
+
           ),
+
         ]),
+
       ),
+
     );
+
   }
 
-  String _fmt(DateTime? dt) {
-    if (dt == null) return '';
-    final d = DateTime.now().difference(dt);
-    if (d.inMinutes < 1) return 'Hozir';
-    if (d.inHours   < 1) return '${d.inMinutes}d';
-    if (d.inDays    < 1) return '${d.inHours}s';
-    return '${d.inDays}k';
-  }
 }
+
+
 
 class _NewChatSheet extends StatelessWidget {
-  final _nameCtrl = TextEditingController();
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24, right: 24, top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Yangi chat',
-                style: TextStyle(color: AppTheme.textPrimary,
-                    fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nameCtrl,
-              style: const TextStyle(color: AppTheme.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Ism yoki guruh nomi',
-                prefixIcon: Icon(Icons.person_add_outlined, color: AppTheme.primary),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: _Btn(
-                icon: Icons.person_outline, label: 'Shaxsiy',
-                onTap: () {
-                  final name = _nameCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  final fakeUser = User(
-                      id: 'u_${DateTime.now().millisecondsSinceEpoch}', name: name);
-                  final chat = context.read<ChatProvider>().newPersonal(fakeUser);
-                  Navigator.pop(context);
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
-                },
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: _Btn(
-                icon: Icons.group_outlined, label: 'Guruh', accent: true,
-                onTap: () {
-                  final name = _nameCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  final chat = context.read<ChatProvider>().newGroup(name, []);
-                  Navigator.pop(context);
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
-                },
-              )),
-            ]),
-          ]),
-    );
+  const _NewChatSheet();
+
+
+
+  Future<List<Map<String, dynamic>>> _getUsersFromSupabase() async {
+
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+
+    final response = await Supabase.instance.client.from('users').select();
+
+
+
+    final list = List<Map<String, dynamic>>.from(response);
+
+    if (myId != null) {
+
+      list.removeWhere((element) => element['id'] == myId);
+
+    }
+
+    return list;
+
   }
-}
 
-class _Btn extends StatelessWidget {
-  final IconData icon;
-  final String   label;
-  final VoidCallback onTap;
-  final bool accent;
-  const _Btn({required this.icon, required this.label,
-    required this.onTap, this.accent = false});
+
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: accent
-            ? AppTheme.accent.withOpacity(.12) : AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: accent ? AppTheme.accent : AppTheme.primary, width: 1.5),
+
+  Widget build(BuildContext context) {
+
+    return Padding(
+
+      padding: EdgeInsets.only(left: 24, right: 24, top: 24, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
+
+      child: Column(
+
+        mainAxisSize: MainAxisSize.min,
+
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+
+          const Text('Yangi suhbat', style: TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
+
+          const SizedBox(height: 14),
+
+          SizedBox(
+
+            height: 300,
+
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+
+              future: _getUsersFromSupabase(),
+
+              builder: (context, snapshot) {
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+
+                  return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+
+                }
+
+                final users = snapshot.data ?? [];
+
+                if (users.isEmpty) {
+
+                  return const Center(child: Text('Boshqa foydalanuvchilar topilmadi.', style: TextStyle(color: AppTheme.textSecondary)));
+
+                }
+
+
+
+                return ListView.builder(
+
+                  itemCount: users.length,
+
+                  itemBuilder: (context, index) {
+
+                    final u = users[index];
+
+                    final String userId = u['id']?.toString() ?? '';
+
+                    final String userName = u['name']?.toString() ?? 'User';
+
+
+
+                    return ListTile(
+
+                      contentPadding: EdgeInsets.zero,
+
+                      leading: CircleAvatar(
+
+                        backgroundColor: AppTheme.primary.withOpacity(0.1),
+
+                        child: const Icon(Icons.person, color: AppTheme.primary),
+
+                      ),
+
+                      title: Text(userName, style: const TextStyle(color: AppTheme.textPrimary)),
+
+                      subtitle: Text(u['isOnline'] == true ? 'Online' : 'Offline', style: const TextStyle(color: AppTheme.online, fontSize: 12)),
+
+                      trailing: const Icon(Icons.chat_bubble_outline, color: AppTheme.primary),
+
+                      onTap: () {
+
+                        final myId = Supabase.instance.client.auth.currentUser?.id ?? '';
+
+
+
+                        final chat = Chat(
+
+                          id: userId,
+
+                          name: userName,
+
+                          type: ChatType.personal,
+
+                          memberIds: [myId, userId],
+
+                          messages: [],
+
+                        );
+
+
+
+                        context.read<ChatProvider>().addChatIfNotExist(chat);
+
+                        Navigator.pop(context);
+
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
+
+                      },
+
+                    );
+
+                  },
+
+                );
+
+              },
+
+            ),
+
+          )
+
+        ],
+
       ),
-      child: Column(children: [
-        Icon(icon, color: accent ? AppTheme.accent : AppTheme.primary),
-        const SizedBox(height: 6),
-        Text(label,
-            style: TextStyle(
-                color: accent ? AppTheme.accent : AppTheme.primary,
-                fontWeight: FontWeight.w600)),
-      ]),
-    ),
-  );
+
+    );
+
+  }
+
 }
