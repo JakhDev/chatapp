@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +11,7 @@ import 'package:chatapp/widgets/MessageBuble.dart';
 class ChatScreen extends StatefulWidget {
   final Chat chat;
   const ChatScreen({super.key, required this.chat});
+
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
@@ -18,24 +19,30 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _textCtrl   = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _focusNode  = FocusNode(); // ✅ Keyboard uchun
   final _picker     = ImagePicker();
   bool _typing      = false;
-  int  _prevCount   = 0;
+  int  _oldMsgCount = 0;
 
   @override
   void initState() {
     super.initState();
     _textCtrl.addListener(
             () => setState(() => _typing = _textCtrl.text.trim().isNotEmpty));
-    WidgetsBinding.instance.addPostFrameCallback((_) =>
-        Future.delayed(const Duration(milliseconds: 100),
-                () => _toBottom(animated: false)));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ✅ Keyboard chiqsin
+      _focusNode.requestFocus();
+      // ✅ Keyboard chiqqandan keyin scroll eng pastga tushsin
+      Future.delayed(const Duration(milliseconds: 400),
+              () => _toBottom(isAnimated: false));
+    });
   }
 
   @override
   void dispose() {
     _textCtrl.dispose();
     _scrollCtrl.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -45,11 +52,11 @@ class _ChatScreenState extends State<ChatScreen> {
     context.read<ChatProvider>().sendText(
         widget.chat.id, text, widget.chat.name, context);
     _textCtrl.clear();
-    _toBottom(animated: true);
+    _toBottom(isAnimated: true);
   }
 
   Future<void> _pickImage() async {
-    final src = await showModalBottomSheet<ImageSource>(
+    final ImageSource? src = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
@@ -75,18 +82,20 @@ class _ChatScreenState extends State<ChatScreen> {
     if (file == null || !mounted) return;
     context.read<ChatProvider>().sendImage(
         widget.chat.id, file.path, widget.chat.name, context);
-    _toBottom(animated: true);
+    _toBottom(isAnimated: true);
   }
 
-  void _toBottom({bool animated = true}) {
+  void _toBottom({bool isAnimated = true}) {
     if (!mounted || !_scrollCtrl.hasClients) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtrl.hasClients) return;
-      final max = _scrollCtrl.position.maxScrollExtent;
-      animated
-          ? _scrollCtrl.animateTo(max,
-          duration: const Duration(milliseconds: 250), curve: Curves.easeOut)
-          : _scrollCtrl.jumpTo(max);
+      if (_scrollCtrl.hasClients) {
+        final max = _scrollCtrl.position.maxScrollExtent;
+        isAnimated
+            ? _scrollCtrl.animateTo(max,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut)
+            : _scrollCtrl.jumpTo(max);
+      }
     });
   }
 
@@ -97,9 +106,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final myId     = provider.currentUser?.id ?? '';
     final isGroup  = widget.chat.type == ChatType.group;
 
-    if (msgs.length != _prevCount) {
-      _prevCount = msgs.length;
-      _toBottom(animated: true);
+    if (msgs.length != _oldMsgCount) {
+      _oldMsgCount = msgs.length;
+      _toBottom(isAnimated: true);
     }
 
     return Scaffold(
@@ -116,16 +125,22 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Row(children: [
           AvatarWidget(name: widget.chat.name, size: 38, isGroup: isGroup),
           const SizedBox(width: 12),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.chat.name, style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 15,
-                  fontWeight: FontWeight.w700)),
-              Text(isGroup ? '${widget.chat.memberIds.length} a\'zo' : 'Onlayn',
-                  style: const TextStyle(color: AppTheme.online, fontSize: 11)),
-            ],
-          )),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.chat.name,
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
+                Text(
+                  isGroup ? '${widget.chat.memberIds.length} a\'zo' : 'Onlayn',
+                  style: const TextStyle(color: AppTheme.online, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
         ]),
       ),
       body: GestureDetector(
@@ -141,17 +156,32 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: msgs.length,
               itemBuilder: (_, i) {
                 final msg    = msgs[i];
-                final isMine = msg.senderId == myId;
+                final isMine = msg.senderId == myId || msg.senderId == 'me';
                 final showName = isGroup && !isMine &&
-                    (i == 0 || msgs[i-1].senderId != msg.senderId);
-                return MessageBubble(
-                    message: msg, isMine: isMine,
-                    showSenderName: showName);
+                    (i == 0 || msgs[i - 1].senderId != msg.senderId);
+
+                // isRead ni xavfsiz olish
+                bool isRead = false;
+                try {
+                  final dynamic d = msg;
+                  isRead = d.isRead == true;
+                } catch (_) {}
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: MessageBubble(
+                    message:        msg,
+                    isMine:         isMine,
+                    showSenderName: showName,
+                    isRead:         isRead,
+                  ),
+                );
               },
             ),
           ),
           _InputBar(
             controller:  _textCtrl,
+            focusNode:   _focusNode,
             isTyping:    _typing,
             onSend:      _send,
             onPickImage: _pickImage,
@@ -164,6 +194,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
 class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
+
   @override
   Widget build(BuildContext context) => Center(
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -183,12 +214,14 @@ class _EmptyChat extends StatelessWidget {
 
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode    focusNode;
   final bool         isTyping;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
 
   const _InputBar({
     required this.controller,
+    required this.focusNode,
     required this.isTyping,
     required this.onSend,
     required this.onPickImage,
@@ -217,19 +250,22 @@ class _InputBar extends StatelessWidget {
         Expanded(
           child: TextField(
             controller: controller,
+            focusNode:  focusNode,
             style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
-            maxLines: 4, minLines: 1,
+            maxLines: 4,
+            minLines: 1,
             textCapitalization: TextCapitalization.sentences,
             textInputAction: TextInputAction.send,
             onSubmitted: (_) => onSend(),
             decoration: InputDecoration(
               hintText: 'Xabar yozing...',
-              filled: true, fillColor: AppTheme.surfaceLight,
+              filled: true,
+              fillColor: AppTheme.surfaceLight,
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
           ),
         ),
@@ -238,12 +274,14 @@ class _InputBar extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 2),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 44, height: 44,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               gradient: isTyping
-                  ? const LinearGradient(colors: [AppTheme.primary, AppTheme.accent])
+                  ? const LinearGradient(
+                  colors: [AppTheme.primary, AppTheme.accent])
                   : null,
-              color:  isTyping ? null : AppTheme.surfaceLight,
+              color: isTyping ? null : AppTheme.surfaceLight,
               shape: BoxShape.circle,
             ),
             child: IconButton(
