@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -17,94 +16,54 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _textCtrl   = TextEditingController();
+  final _textCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final _focusNode  = FocusNode(); // ✅ Keyboard uchun
-  final _picker     = ImagePicker();
-  bool _typing      = false;
-  int  _oldMsgCount = 0;
+  final _picker = ImagePicker();
+  bool _typing = false;
+  int _oldMsgCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _textCtrl.addListener(
-            () => setState(() => _typing = _textCtrl.text.trim().isNotEmpty));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // ✅ Keyboard chiqsin
-      _focusNode.requestFocus();
-      // ✅ Keyboard chiqqandan keyin scroll eng pastga tushsin
-      Future.delayed(const Duration(milliseconds: 400),
-              () => _toBottom(isAnimated: false));
-    });
+    _textCtrl.addListener(() => setState(() => _typing = _textCtrl.text.trim().isNotEmpty));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom(isAnimated: false));
   }
 
   @override
   void dispose() {
     _textCtrl.dispose();
     _scrollCtrl.dispose();
-    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _toBottom({bool isAnimated = true}) {
+    if (!mounted || !_scrollCtrl.hasClients) return;
+    final max = _scrollCtrl.position.maxScrollExtent;
+    isAnimated
+        ? _scrollCtrl.animateTo(max, duration: const Duration(milliseconds: 250), curve: Curves.easeOut)
+        : _scrollCtrl.jumpTo(max);
   }
 
   void _send() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
-    context.read<ChatProvider>().sendText(
-        widget.chat.id, text, widget.chat.name, context);
+    context.read<ChatProvider>().sendText(widget.chat.id, text, widget.chat.name, context);
     _textCtrl.clear();
-    _toBottom(isAnimated: true);
   }
 
   Future<void> _pickImage() async {
-    final ImageSource? src = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.camera_alt_outlined, color: AppTheme.primary),
-            title: const Text('Kamera', style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined, color: AppTheme.accent),
-            title: const Text('Galereya', style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-          ),
-        ]),
-      ),
-    );
-    if (src == null) return;
-    final file = await _picker.pickImage(source: src, imageQuality: 80);
-    if (file == null || !mounted) return;
-    context.read<ChatProvider>().sendImage(
-        widget.chat.id, file.path, widget.chat.name, context);
-    _toBottom(isAnimated: true);
-  }
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null || !mounted) return;
 
-  void _toBottom({bool isAnimated = true}) {
-    if (!mounted || !_scrollCtrl.hasClients) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollCtrl.hasClients) {
-        final max = _scrollCtrl.position.maxScrollExtent;
-        isAnimated
-            ? _scrollCtrl.animateTo(max,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut)
-            : _scrollCtrl.jumpTo(max);
-      }
-    });
+    // ChatProvider'ga 'path' emas, 'XFile' ni yuboring
+    context.read<ChatProvider>().sendImage(widget.chat.id, pickedFile as XFile, widget.chat.name, context);
   }
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
-    final msgs     = provider.messages(widget.chat.id);
-    final myId     = provider.currentUser?.id ?? '';
-    final isGroup  = widget.chat.type == ChatType.group;
+    final msgs = provider.messages(widget.chat.id);
+    final myId = provider.currentUser?.id ?? '';
+    final isGroup = widget.chat.type == ChatType.group;
 
     if (msgs.length != _oldMsgCount) {
       _oldMsgCount = msgs.length;
@@ -114,184 +73,83 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: AppTheme.background,
         elevation: 0,
+        titleSpacing: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          color: AppTheme.textPrimary,
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        titleSpacing: 0,
         title: Row(children: [
-          AvatarWidget(name: widget.chat.name, size: 38, isGroup: isGroup),
+          AvatarWidget(name: widget.chat.name, size: 36, isGroup: isGroup),
           const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.chat.name,
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
-                Text(
-                  isGroup ? '${widget.chat.memberIds.length} a\'zo' : 'Onlayn',
-                  style: const TextStyle(color: AppTheme.online, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.chat.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text("Onlayn", style: TextStyle(fontSize: 11, color: Colors.greenAccent)),
+          ]),
         ]),
       ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Column(children: [
-          Expanded(
-            child: msgs.isEmpty
-                ? const _EmptyChat()
-                : ListView.builder(
-              controller: _scrollCtrl,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 12),
-              itemCount: msgs.length,
-              itemBuilder: (_, i) {
-                final msg    = msgs[i];
-                final isMine = msg.senderId == myId || msg.senderId == 'me';
-                final showName = isGroup && !isMine &&
-                    (i == 0 || msgs[i - 1].senderId != msg.senderId);
-
-                // isRead ni xavfsiz olish
-                bool isRead = false;
-                try {
-                  final dynamic d = msg;
-                  isRead = d.isRead == true;
-                } catch (_) {}
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: MessageBubble(
-                    message:        msg,
-                    isMine:         isMine,
-                    showSenderName: showName,
-                    isRead:         isRead,
-                  ),
-                );
-              },
+      body: Column(children: [
+        Expanded(
+          child: msgs.isEmpty
+              ? const Center(child: Text("Hozircha xabarlar yo'q", style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+            controller: _scrollCtrl,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            itemCount: msgs.length,
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: MessageBubble(
+                message: msgs[i],
+                isMine: msgs[i].senderId == myId,
+                showSenderName: isGroup && msgs[i].senderId != myId,
+              ),
             ),
           ),
-          _InputBar(
-            controller:  _textCtrl,
-            focusNode:   _focusNode,
-            isTyping:    _typing,
-            onSend:      _send,
-            onPickImage: _pickImage,
-          ),
-        ]),
-      ),
+        ),
+        _InputBar(controller: _textCtrl, isTyping: _typing, onSend: _send, onPickImage: _pickImage),
+      ]),
     );
   }
 }
 
-class _EmptyChat extends StatelessWidget {
-  const _EmptyChat();
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-            color: AppTheme.surfaceLight, shape: BoxShape.circle),
-        child: const Icon(Icons.waving_hand_outlined,
-            size: 38, color: AppTheme.primary),
-      ),
-      const SizedBox(height: 14),
-      const Text('Salom deb yozing! 👋',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
-    ]),
-  );
-}
-
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
-  final FocusNode    focusNode;
-  final bool         isTyping;
+  final bool isTyping;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
 
-  const _InputBar({
-    required this.controller,
-    required this.focusNode,
-    required this.isTyping,
-    required this.onSend,
-    required this.onPickImage,
-  });
+  const _InputBar({required this.controller, required this.isTyping, required this.onSend, required this.onPickImage});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(
-        left: 12, right: 12, top: 10,
-        bottom: MediaQuery.of(context).padding.bottom + 10,
-      ),
-      decoration: const BoxDecoration(
-        color: AppTheme.surface,
-        border: Border(top: BorderSide(color: AppTheme.surfaceLight)),
-      ),
+      color: AppTheme.background,
+      padding: EdgeInsets.fromLTRB(8, 8, 8, MediaQuery.of(context).padding.bottom + 8),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: IconButton(
-            icon: const Icon(Icons.add_circle_outline,
-                color: AppTheme.primary, size: 26),
-            onPressed: onPickImage,
-          ),
-        ),
+        IconButton(icon: const Icon(Icons.add, color: Colors.white70), onPressed: onPickImage),
         Expanded(
           child: TextField(
             controller: controller,
-            focusNode:  focusNode,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
-            maxLines: 4,
-            minLines: 1,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => onSend(),
+            maxLines: 5, minLines: 1,
+            style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Xabar yozing...',
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
               filled: true,
               fillColor: AppTheme.surfaceLight,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none),
-              contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: isTyping
-                  ? const LinearGradient(
-                  colors: [AppTheme.primary, AppTheme.accent])
-                  : null,
-              color: isTyping ? null : AppTheme.surfaceLight,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: Icon(
-                isTyping ? Icons.send_rounded : Icons.mic_outlined,
-                color: isTyping ? Colors.white : AppTheme.textSecondary,
-                size: 20,
-              ),
-              onPressed: isTyping ? onSend : () {},
-            ),
+        GestureDetector(
+          onTap: onSend,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle),
+            child: Icon(isTyping ? Icons.send : Icons.mic, color: Colors.white, size: 20),
           ),
         ),
       ]),

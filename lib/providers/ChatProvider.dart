@@ -4,8 +4,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/services/WebSocketService.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; // Buni import qiling
+
 
 class ChatProvider extends ChangeNotifier {
   final WebSocketService _ws;
@@ -504,77 +507,41 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // ── Rasm yuborish ─────────────────────────────────────────────────────────
-  Future<void> sendImage(String chatId, String filePath, String chatName, BuildContext context) async {
-    if (_me == null || filePath.isEmpty) return;
 
-    final file = File(filePath);
-    final timeNow = DateTime.now();
-    final fileName = '${_me!.id}_${timeNow.millisecondsSinceEpoch}.jpg';
-
-    final localMsg = Message(
-      id:         'local_img_${timeNow.millisecondsSinceEpoch}',
-      chatId:     chatId,
-      senderId:   _me!.id,
-      senderName: _me!.name,
-      content:    filePath,
-      type:       MessageType.image,
-      timestamp:  timeNow,
-    );
-
-    int i = _chats.indexWhere((c) => c.id == chatId);
-    if (i == -1) {
-      _chats.insert(0, Chat(
-        id: chatId,
-        name: chatName,
-        type: ChatType.personal,
-        memberIds: [_me!.id],
-      ));
-      i = 0;
-    }
-    _addMsgAndFormat(_chats[i], localMsg);
-
+// ChatProvider.dart faylida:
+  Future<void> sendImage(String chatId, XFile xFile, String senderName, BuildContext context) async {
     try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final path = 'chat_images/$fileName';
+
+      // XFile'dan baytlarni olish (Web va Mobil uchun bir xil ishlaydi)
+      final Uint8List fileBytes = await xFile.readAsBytes();
+
       await sb.Supabase.instance.client.storage
-          .from('chat_images')
-          .upload(fileName, file);
+          .from('chat_bucket')
+          .uploadBinary(path, fileBytes);
 
-      final publicUrl = sb.Supabase.instance.client.storage
-          .from('chat_images')
-          .getPublicUrl(fileName);
+      final String imageUrl = sb.Supabase.instance.client.storage
+          .from('chat_bucket')
+          .getPublicUrl(path);
 
-      _ws.sendMessage(
-        chatId: chatId,
-        senderId: _me!.id,
-        senderName: _me!.name,
-        content: publicUrl,
-        type: MessageType.image,
-      );
-
-      // ✅ TO'G'RI: 'isread' (pastki chiziqsiz)
       await sb.Supabase.instance.client.from('messages').insert({
-        'chatid':     chatId,
-        'senderid':   _me!.id,
-        'sendername': _me!.name,
-        'content':    publicUrl,
-        'type':       'image',
-        'isread':     false,
+        'chatid': chatId,
+        'senderid': sb.Supabase.instance.client.auth.currentUser!.id,
+        'sendername': senderName,
+        'content': imageUrl,
+        'type': 'image',
+        'isread': false,
       });
-      if (kDebugMode) print('✅ Rasm bazaga yozildi');
     } catch (e) {
-      if (kDebugMode) print('🚨 sendImage xatolik: $e');
+      debugPrint('Xatolik tafsiloti: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Rasm yuborilmadi: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Rasm yuklanmadi: $e')),
         );
       }
     }
-  }
-
-  // ── Tizimdan chiqish (Logout) ─────────────────────────────────────────────
-  Future<void> logout() async {
+  }  Future<void> logout() async {
     try {
       if (_me != null) {
         await sb.Supabase.instance.client
