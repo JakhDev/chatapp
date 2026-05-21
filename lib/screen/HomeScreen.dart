@@ -483,6 +483,54 @@ class _ChatTile extends StatelessWidget {
   final Chat chat;
   const _ChatTile({required this.chat});
 
+  void _showDeleteDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
+          SizedBox(width: 8),
+          Text("Chatni o'chirish",
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 17)),
+        ]),
+        content: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 14, height: 1.5),
+            children: [
+              const TextSpan(text: '"'),
+              TextSpan(
+                text: chat.name,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
+              ),
+              const TextSpan(
+                  text: '" bilan bo\'lgan chat va barcha xabarlar o\'chiriladi.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Bekor qilish',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await context.read<ChatProvider>().deleteChat(chat.id);
+            },
+            child: const Text("O'chirish",
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _fmt(DateTime? dt) {
     if (dt == null) return '';
     final t   = dt.toLocal();
@@ -511,6 +559,8 @@ class _ChatTile extends StatelessWidget {
           if (context.mounted) context.read<ChatProvider>().closeChat();
         });
       },
+      // ✅ Bosib turish — chatni o'chirish
+      onLongPress: () => _showDeleteDialog(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
         child: Row(children: [

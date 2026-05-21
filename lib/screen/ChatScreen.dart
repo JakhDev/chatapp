@@ -67,13 +67,36 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         backgroundColor: AppTheme.background,
+        // ✅ Default leading (back button) o'chiriladi
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        // ✅ titleSpacing: 0 — back button bilan avatar orasidagi bo'sh joy yo'qoladi
+        titleSpacing: 0,
         title: Row(children: [
           AvatarWidget(name: widget.chat.name, size: 36, isGroup: isGroup),
-          const SizedBox(width: 12),
-          Text(widget.chat.name, style: const TextStyle(color: Colors.white)),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.chat.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              // ✅ Online status qo'shimcha
+              const Text(
+                'Onlayn',
+                style: TextStyle(color: AppTheme.online, fontSize: 11),
+              ),
+            ],
+          ),
         ]),
-      ),
-      body: Column(children: [
+      ),      body: Column(children: [
         Expanded(
           child: ListView.builder(
             controller: _scrollCtrl,

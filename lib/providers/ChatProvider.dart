@@ -611,6 +611,28 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  // ── Chatni o'chirish ──────────────────────────────────────────────────────
+  Future<void> deleteChat(String chatId) async {
+    try {
+      // Avval chatdagi barcha xabarlarni o'chiramiz
+      await sb.Supabase.instance.client
+          .from('messages')
+          .delete()
+          .eq('chatid', chatId);
+
+      // Lokal listdan olib tashlaymiz
+      _chats.removeWhere((c) => c.id == chatId);
+
+      // Agar hozir ochiq bo'lsa — yopamiz
+      if (_activeChatId == chatId) _activeChatId = null;
+
+      notifyListeners();
+      if (kDebugMode) print('✅ Chat o\'chirildi: $chatId');
+    } catch (e) {
+      if (kDebugMode) print('🚨 deleteChat xatolik: $e');
+    }
+  }
+
   // ── Foydalanuvchini o'chirish ─────────────────────────────────────────────
   Future<void> deleteUser(String userId) async {
     try {
