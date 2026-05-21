@@ -33,29 +33,47 @@ class _Header extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(children: [
-        AvatarWidget(name: user?.name ?? 'U', size: 42, isOnline: true),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(user?.name ?? '',
-                style: const TextStyle(color: AppTheme.textPrimary,
-                    fontSize: 17, fontWeight: FontWeight.w700)),
-            Row(children: [
-              Container(
-                width: 7, height: 7,
-                decoration: const BoxDecoration(
-                  color: AppTheme.online,
-                  shape: BoxShape.circle,
-                ),
+        // 🔥 Profil ustiga bosilganda dialog ochadigan qildik
+        InkWell(
+          onTap: () => _showProfileDialog(context, user),
+          borderRadius: BorderRadius.circular(24),
+          child: Row(
+            children: [
+              AvatarWidget(name: user?.name ?? 'U', size: 42, isOnline: true),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user?.name ?? '',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700),
+                  ),
+                  Row(children: [
+                    Container(
+                      width: 7, height: 7,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.online,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'Onlayn',
+                      style: TextStyle(
+                          color: AppTheme.online,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ]),
+                ],
               ),
-              const SizedBox(width: 5),
-              const Text(
-                'Onlayn',
-                style: TextStyle(color: AppTheme.online, fontSize: 12, fontWeight: FontWeight.w500),
-              ),
-            ]),
-          ]),
+            ],
+          ),
         ),
+        const Spacer(), // O'rtadagi bo'shliqni to'ldirish uchun
         IconButton(
           icon: const Icon(Icons.people_alt_outlined, color: AppTheme.primary),
           onPressed: () {
@@ -106,8 +124,72 @@ class _Header extends StatelessWidget {
       ]),
     );
   }
-}
 
+  // 🔥 PROFIL MA'LUMOTLARINI CHIQARUVCHI CHUROYLI DIALOG
+// 🔥 PROFIL MA'LUMOTLARINI CHIQARUVCHI CHUROYLI DIALOG (EMAIL BILAN)
+  void _showProfileDialog(BuildContext context, dynamic user) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Katta Avatar
+              AvatarWidget(name: user?.name ?? 'U', size: 80, isOnline: true),
+              const SizedBox(height: 16),
+
+              // Ism
+              Text(
+                user?.name ?? 'Foydalanuvchi',
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+
+              // Status
+              const Text(
+                'FluxChat Foydalanuvchisi',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              const Divider(height: 32, color: AppTheme.surfaceLight),
+
+              // 🔥 ID o'rniga Elektron pochta qatori qo'shildi
+              Row(
+              ),
+              const SizedBox(height: 24),
+
+              // Yopish tugmasi
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.surfaceLight,
+                    foregroundColor: AppTheme.textPrimary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Yopish", style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }}
 class _UserListSheet extends StatelessWidget {
   const _UserListSheet();
 
