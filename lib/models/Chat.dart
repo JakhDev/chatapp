@@ -1,6 +1,7 @@
 enum MessageType { text, image }
 enum ChatType    { personal, group }
 
+// ── User ──────────────────────────────────────────────────────────────────────
 class User {
   final String id;
   final String name;
@@ -33,6 +34,7 @@ class User {
   };
 }
 
+// ── Message ───────────────────────────────────────────────────────────────────
 class Message {
   final String      id;
   final String      chatId;
@@ -41,7 +43,8 @@ class Message {
   final String      content;
   final MessageType type;
   final DateTime    timestamp;
-  bool              isRead;
+  // ✅ final qilib o'zgartirdik — copyWith orqali yangilanadi
+  final bool        isRead;
 
   Message({
     required this.id,
@@ -53,6 +56,29 @@ class Message {
     DateTime?      timestamp,
     this.isRead    = false,
   }) : timestamp = timestamp ?? DateTime.now();
+
+  // ✅ QO'SHILDI — markAsRead da ishlatiladi
+  Message copyWith({
+    String?      id,
+    String?      chatId,
+    String?      senderId,
+    String?      senderName,
+    String?      content,
+    MessageType? type,
+    DateTime?    timestamp,
+    bool?        isRead,
+  }) {
+    return Message(
+      id:         id         ?? this.id,
+      chatId:     chatId     ?? this.chatId,
+      senderId:   senderId   ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      content:    content    ?? this.content,
+      type:       type       ?? this.type,
+      timestamp:  timestamp  ?? this.timestamp,
+      isRead:     isRead     ?? this.isRead,
+    );
+  }
 
   factory Message.fromJson(Map<String, dynamic> j) {
     final rawTs = j['created_at'] as String? ?? j['timestamp'] as String?;
@@ -66,7 +92,8 @@ class Message {
       content:    j['content']  as String? ?? '',
       type:       j['type'] == 'image' ? MessageType.image : MessageType.text,
       timestamp:  ts,
-      isRead:     (j['is_read'] ?? j['isread'] ?? j['isRead']) as bool? ?? false,
+      // ✅ Barcha mumkin bo'lgan ustun nomlarini tekshiradi
+      isRead:     (j['isread'] ?? j['is_read'] ?? j['isRead']) as bool? ?? false,
     );
   }
 
@@ -76,15 +103,16 @@ class Message {
     'sendername': senderName,
     'content':    content,
     'type':       type == MessageType.image ? 'image' : 'text',
-    'is_read':    isRead,
+    'isread':     isRead,
   };
 }
 
+// ── Chat ──────────────────────────────────────────────────────────────────────
 class Chat {
-  final String       id;
-  final String       name;
-  final ChatType     type;
-  final List<String> memberIds;
+  final String        id;
+  final String        name;
+  final ChatType      type;
+  final List<String>  memberIds;
   final List<Message> messages;
   String?   lastMessage;
   DateTime? lastMessageTime;
