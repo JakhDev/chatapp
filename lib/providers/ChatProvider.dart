@@ -944,7 +944,47 @@ class ChatProvider extends ChangeNotifier {
       if (kDebugMode) print('🚨 deleteUser: $e');
     }
   }
+// 🗑️ Chat history o'chirish
+  Future<void> clearChatHistory(String chatId, BuildContext context) async {
+    try {
+      // Hamma xabarlarni delete qilish
+      await sb.Supabase.instance.client
+          .from('messages')
+          .delete()
+          .eq('chatid', chatId);
 
+      // UI-ni yangilash
+      final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+      if (chatIdx != -1) {
+        _chats[chatIdx].messages.clear();
+        _chats[chatIdx].lastMessage = null;
+        _chats[chatIdx].lastMessageTime = null;
+        _chats[chatIdx].unreadCount = 0;
+      }
+
+      notifyListeners();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat history o\'chirildi'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('🚨 clearChatHistory error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Xatolik: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
   Future<void> logout() async {
     try {
       if (_me != null)

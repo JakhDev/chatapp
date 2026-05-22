@@ -1,5 +1,5 @@
 name: chatapp
-description: "A new Flutter project."
+description: "FluxChat - Real-time messaging app"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -20,7 +20,7 @@ dependencies:
   # WebSocket
   web_socket_channel: ^3.0.1
 
-  # Image picker (kamera + galereya)
+  # Image picker
   image_picker: ^1.1.2
 
   # Supabase
@@ -29,24 +29,29 @@ dependencies:
   # Google Login
   google_sign_in: ^6.2.1
 
-  # Rasmni kattalashtirib ochish uchun
+  # Rasm ko'rish
   photo_view: ^0.15.0
 
-  # Audio recording and playback
+  # Audio — just_audio o'rniga yengilroq
+  audioplayers: ^6.0.0
   record: ^6.2.0
   just_audio: ^0.9.36
+
   path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon/bolt_rounded.png"
-  min_sdk_android: 21
+  min_sdk_android: 23
+  adaptive_icon_background: "#0D0E1A"
+  adaptive_icon_foreground: "assets/icon/bolt_rounded.png"
 
 flutter:
   uses-material-design: true

@@ -19,14 +19,12 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  // ── Controllers ──────────────────────────────────────────────────────────
   final _textCtrl   = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _focusNode  = FocusNode();
   final _picker     = ImagePicker();
   final _audioSvc   = AudioService();
 
-  // ── State ─────────────────────────────────────────────────────────────────
   bool        _typing          = false;
   Message?    _replyTo;
   Set<String> _selected        = {};
@@ -64,7 +62,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // ── Scroll ────────────────────────────────────────────────────────────────
   void _scrollToBottom() {
     if (_scrollCtrl.hasClients) {
       _scrollCtrl.animateTo(
@@ -75,7 +72,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // ── Send text ─────────────────────────────────────────────────────────────
   void _send() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
@@ -88,7 +84,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
-  // ── Send image ────────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
     final src = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -120,7 +115,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         widget.chat.id, file, widget.chat.name, context);
   }
 
-  // ── Audio recording ───────────────────────────────────────────────────────
   Future<void> _startAudioRecording() async {
     final ok = await _audioSvc.startRecording();
     if (!ok) return;
@@ -153,7 +147,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  // ── Selection ─────────────────────────────────────────────────────────────
   void _onLongPress(Message msg) {
     if (msg.id.startsWith('local_') || msg.isDeleted) return;
     final myId = context.read<ChatProvider>().currentUser?.id ?? '';
@@ -235,7 +228,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Tap (edit dialog) ─────────────────────────────────────────────────────
   void _onTap(Message msg, String myId) {
     if (_isSelectionMode) {
       if (!msg.id.startsWith('local_') && !msg.isDeleted) _toggleSelect(msg.id);
@@ -343,7 +335,69 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── AppBars ───────────────────────────────────────────────────────────────
+  // 🎯 MORE MENU
+  void _showMoreMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+            title: const Text("Chat history o'chirish",
+                style: TextStyle(color: AppTheme.textPrimary)),
+            subtitle: const Text('Barcha xabarlar o\'chiriladi',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _confirmClearHistory();
+            },
+          ),
+          const Divider(height: 1, color: AppTheme.surfaceLight),
+          ListTile(
+            leading: const Icon(Icons.search_outlined, color: AppTheme.primary),
+            title: const Text('Izlash',
+                style: TextStyle(color: AppTheme.textPrimary)),
+            onTap: () => Navigator.pop(ctx),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _confirmClearHistory() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Chat history o'chirish?",
+            style: TextStyle(color: AppTheme.textPrimary,
+                fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text('Bu amal qaytarib bo\'lmaydi. Barcha xabarlar o\'chiriladi.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Bekor qilish',
+                  style: TextStyle(color: AppTheme.textSecondary))),
+          TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.read<ChatProvider>().clearChatHistory(widget.chat.id, context);
+              },
+              child: const Text("O'chirish",
+                  style: TextStyle(color: Colors.redAccent,
+                      fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _normalAppBar() {
     final isGroup = widget.chat.type == ChatType.group;
     return AppBar(
@@ -369,14 +423,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       ]),
       actions: [
+        // ➕ MORE BUTTON (Video va Call o'rniga)
         IconButton(
-            icon: const Icon(Icons.videocam_outlined,
+            tooltip: "Batafsil",
+            icon: const Icon(Icons.more_vert_rounded,
                 color: AppTheme.textSecondary),
-            onPressed: () {}),
-        IconButton(
-            icon: const Icon(Icons.call_outlined,
-                color: AppTheme.textSecondary),
-            onPressed: () {}),
+            onPressed: _showMoreMenu),
       ],
     );
   }
@@ -415,7 +467,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
@@ -434,7 +485,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         appBar: _isSelectionMode ? _selectionAppBar() : _normalAppBar(),
         body: Column(children: [
 
-          // ── Messages list ──
+          // ── Messages list with date separators ──
           Expanded(
             child: msgs.isEmpty
                 ? const _EmptyChat()
@@ -443,11 +494,48 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               reverse:    true,
               padding:    const EdgeInsets.symmetric(
                   horizontal: 4, vertical: 8),
-              itemCount:  msgs.length,
+              itemCount:  msgs.length * 2, // Date separators uchun
               itemBuilder: (_, i) {
-                final index  = msgs.length - 1 - i;
-                final msg    = msgs[index];
-                final isMine = msg.senderId == myId;
+                // Date separator
+                if (i % 2 == 0) {
+                  final msgIndex = (i ~/ 2);
+                  if (msgIndex >= msgs.length) return null;
+
+                  final msg = msgs[msgs.length - 1 - msgIndex];
+                  final showDate = msgIndex == msgs.length - 1 ||
+                      !_isSameDay(msg.timestamp,
+                          msgs[msgs.length - 2 - msgIndex].timestamp);
+
+                  if (!showDate) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceLight,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _formatDate(msg.timestamp),
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                // Message
+                final msgIndex = (i ~/ 2);
+                final index    = msgs.length - 1 - msgIndex;
+                final msg      = msgs[index];
+                final isMine   = msg.senderId == myId;
                 final canSwipe = !_isSelectionMode &&
                     !msg.isDeleted &&
                     !msg.id.startsWith('local_');
@@ -495,6 +583,34 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ]),
       ),
     );
+  }
+
+  // 📅 Kunlar ajratish uchun helper methods
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+
+    if (_isSameDay(dt, now)) {
+      return "Bugun";
+    } else if (_isSameDay(dt, yesterday)) {
+      return "Kecha";
+    } else if (dt.year == now.year) {
+      return "${_monthName(dt.month)} ${dt.day}";
+    } else {
+      return "${dt.day}.${dt.month}.${dt.year}";
+    }
+  }
+
+  String _monthName(int m) {
+    const names = [
+      'Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn',
+      'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek',
+    ];
+    return names[m - 1];
   }
 }
 
@@ -707,15 +823,11 @@ class _InputBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           8, 8, 8, MediaQuery.of(context).padding.bottom + 8),
       child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-
-        // Add button
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
           child: _CircleBtn(icon: Icons.add_rounded, onTap: onPickImage),
         ),
         const SizedBox(width: 8),
-
-        // Text field
         Expanded(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 120),
@@ -749,8 +861,6 @@ class _InputBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-
-        // Send / Mic / Recording button
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
           child: AnimatedSwitcher(
@@ -837,7 +947,6 @@ class _RecordingRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      // Cancel
       GestureDetector(
         onTap: onCancel,
         child: Container(
@@ -849,8 +958,6 @@ class _RecordingRow extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 8),
-
-      // Duration + pulse
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -872,8 +979,6 @@ class _RecordingRow extends StatelessWidget {
         ]),
       ),
       const SizedBox(width: 8),
-
-      // Send
       GestureDetector(
         onTap: onStop,
         child: Container(

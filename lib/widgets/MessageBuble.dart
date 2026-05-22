@@ -344,7 +344,7 @@ class _AudioBubbleState extends State<_AudioBubble>
                       ? _fmt(_position)
                       : _fmt(_duration),
                   style: TextStyle(
-                    color:    textColor.withAlpha(180),
+                    color:    textColor.withAlpha(100),
                     fontSize: 11,
                   ),
                 ),

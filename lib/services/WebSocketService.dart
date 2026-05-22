@@ -1,12 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:chatapp/models/Chat.dart';
-
-// ── Conditional import: Web da stub, mobile da haqiqiy paket ─────────────────
-import 'package:web_socket_channel/web_socket_channel.dart'
-if (dart.library.html) 'package:chatapp/services/ws_stub.dart'
-if (dart.library.io)   'package:web_socket_channel/io.dart';
 
 enum WsStatus { disconnected, connecting, connected, error }
 
@@ -25,9 +21,8 @@ class WebSocketService extends ChangeNotifier {
 
   String? _userId;
 
-  // ── Connect ─────────────────────────────────────────────────────────────────
   Future<void> connect(String userId) async {
-    // Web platformda WebSocket ishlatmaymiz — Supabase Realtime yetarli
+    // Web platformda WebSocket ishlatmaymiz
     if (kIsWeb) {
       _userId = userId;
       _setStatus(WsStatus.connected);
@@ -62,13 +57,11 @@ class WebSocketService extends ChangeNotifier {
     }
   }
 
-  // ── Join chat ────────────────────────────────────────────────────────────────
   void joinChat(String chatId) {
     if (kIsWeb || !isConnected) return;
     _send({'type': 'join_chat', 'chatId': chatId, 'userId': _userId});
   }
 
-  // ── Send message ─────────────────────────────────────────────────────────────
   void sendMessage({
     required String     chatId,
     required String     senderId,
@@ -96,19 +89,16 @@ class WebSocketService extends ChangeNotifier {
     });
   }
 
-  // ── Internal handlers ────────────────────────────────────────────────────────
   void _onData(dynamic raw) {
     try {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
       if (json['type'] == 'message') {
         final msgJson = Map<String, dynamic>.from(
             json['message'] as Map<String, dynamic>);
-        // chatId ni to'ldirish
         if ((msgJson['chatId'] as String? ?? '').isEmpty) {
           msgJson['chatId'] = json['chatId'] as String? ?? '';
         }
         final msg = Message.fromJson(msgJson);
-        // O'z xabarimizni qayta qo'shmaymiz
         if (msg.senderId != _userId) _msgCtrl.add(msg);
       }
     } catch (e) {
@@ -160,7 +150,6 @@ class WebSocketService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Disconnect ───────────────────────────────────────────────────────────────
   void disconnect() {
     _sub?.cancel();
     _pingTimer?.cancel();
