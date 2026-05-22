@@ -32,16 +32,21 @@ dependencies:
   # Rasmni kattalashtirib ochish uchun
   photo_view: ^0.15.0
 
+  # Audio recording and playback
+  record: ^6.2.0
+  just_audio: ^0.9.36
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 
-
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon/bolt_rounded.png" # Logongiz joylashgan manzil
+  image_path: "assets/icon/bolt_rounded.png"
   min_sdk_android: 21
+
 flutter:
   uses-material-design: true

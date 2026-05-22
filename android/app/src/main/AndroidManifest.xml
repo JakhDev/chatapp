@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Mikrofondan foydalanish va ovoz yozish uchun (Majburiy) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Ovozli xabarni serverga/internetga yuborish uchun (Majburiy) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Internet holatini tekshirish uchun (Tavsiya etiladi) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="Flux Chat"
         android:name="${applicationName}"

@@ -1,10 +1,19 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/theme/AppTheme.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../screen/FullScreenImage.dart';
 
+// ── Helper: timestamp → '14:38' ───────────────────────────────────────────────
+String _fmtTime(DateTime dt) {
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  MessageBubble — tashqi widget (ChatScreen ishlatadi)
+// ═══════════════════════════════════════════════════════════════════════════════
 class MessageBubble extends StatelessWidget {
   final Message      message;
   final bool         isMine;
@@ -19,30 +28,14 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.showSenderName,
+    required this.isSelected,
+    required this.isSelectionMode,
     required this.onTap,
     required this.onLongPress,
-    this.isSelected      = false,
-    this.isSelectionMode = false,
   });
-
-  String _fmtTime(DateTime dt) {
-    final t = dt.toUtc().add(const Duration(hours: 5));
-    return '${t.hour.toString().padLeft(2, '0')}:'
-        '${t.minute.toString().padLeft(2, '0')}';
-  }
-
-  BorderRadius get _radius => BorderRadius.only(
-    topLeft:     const Radius.circular(18),
-    topRight:    const Radius.circular(18),
-    bottomLeft:  Radius.circular(isMine ? 18 : 4),
-    bottomRight: Radius.circular(isMine ? 4 : 18),
-  );
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = _fmtTime(message.timestamp);
-    final isImage = message.type == MessageType.image;
-
     return GestureDetector(
       onTap:       onTap,
       onLongPress: onLongPress,
@@ -51,76 +44,19 @@ class MessageBubble extends StatelessWidget {
         color: isSelected
             ? AppTheme.primary.withAlpha(40)
             : Colors.transparent,
-        padding: EdgeInsets.only(
-          top: 2, bottom: 2,
-          left:  isMine ? 60 : 4,
-          right: isMine ? 4 : 60,
-        ),
-        child: Row(
-          mainAxisAlignment:
-          isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-
-            // ── Selection checkbox (Telegram uslubi) ──────────────────────
-            if (isSelectionMode)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4, right: 6, left: 6),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 22, height: 22,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected
-                        ? AppTheme.primary
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected
-                          ? AppTheme.primary
-                          : AppTheme.textSecondary,
-                      width: 2,
-                    ),
-                  ),
-                  child: isSelected
-                      ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 14)
-                      : null,
-                ),
-              ),
-
-            // ── Bubble ────────────────────────────────────────────────────
-            Flexible(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                decoration: BoxDecoration(
-                  color: message.isDeleted
-                      ? AppTheme.surfaceLight.withAlpha(180)
-                      : isMine
-                      ? AppTheme.myMsgBg
-                      : AppTheme.otherMsgBg,
-                  borderRadius: _radius,
-                ),
-                child: ClipRRect(
-                  borderRadius: _radius,
-                  child: message.isDeleted
-                      ? _DeletedContent(isMine: isMine, timeStr: timeStr)
-                      : isImage
-                      ? _ImageContent(
-                    content: message.content,
-                    timeStr: timeStr,
-                    isMine:  isMine,
-                    isRead:  message.isRead,
-                  )
-                      : _TextContent(
-                    message:        message,
-                    timeStr:        timeStr,
-                    isMine:         isMine,
-                    showSenderName: showSenderName,
-                  ),
-                ),
-              ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Align(
+          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.78,
             ),
-          ],
+            child: _BubbleContent(
+              message:        message,
+              isMine:         isMine,
+              showSenderName: showSenderName,
+            ),
+          ),
         ),
       ),
     );
@@ -128,32 +64,299 @@ class MessageBubble extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  O'chirilgan xabar
+//  Bubble content — xabar turiga qarab render
 // ═══════════════════════════════════════════════════════════════════════════════
-class _DeletedContent extends StatelessWidget {
-  final bool   isMine;
-  final String timeStr;
-  const _DeletedContent({required this.isMine, required this.timeStr});
+class _BubbleContent extends StatelessWidget {
+  final Message message;
+  final bool    isMine;
+  final bool    showSenderName;
+
+  const _BubbleContent({
+    required this.message,
+    required this.isMine,
+    required this.showSenderName,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      child: Row(
+    if (message.isDeleted) {
+      return _DeletedBubble(isMine: isMine);
+    }
+    if (message.type == MessageType.audio) {
+      return _AudioBubble(
+        message:        message,
+        isMine:         isMine,
+        showSenderName: showSenderName,
+      );
+    }
+    if (message.type == MessageType.image) {
+      return _ImageBubble(
+        message:        message,
+        isMine:         isMine,
+        showSenderName: showSenderName,
+      );
+    }
+    return _TextBubble(
+      message:        message,
+      isMine:         isMine,
+      showSenderName: showSenderName,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Audio bubble — Telegram uslubida
+// ═══════════════════════════════════════════════════════════════════════════════
+class _AudioBubble extends StatefulWidget {
+  final Message message;
+  final bool    isMine;
+  final bool    showSenderName;
+
+  const _AudioBubble({
+    required this.message,
+    required this.isMine,
+    required this.showSenderName,
+  });
+
+  @override
+  State<_AudioBubble> createState() => _AudioBubbleState();
+}
+
+class _AudioBubbleState extends State<_AudioBubble>
+    with SingleTickerProviderStateMixin {
+  final AudioPlayer _player = AudioPlayer();
+  bool     _isPlaying = false;
+  bool     _isLoading = false;
+  Duration _duration  = Duration.zero;
+  Duration _position  = Duration.zero;
+
+  late final AnimationController _waveAnim = AnimationController(
+    vsync:    this,
+    duration: const Duration(milliseconds: 700),
+  );
+
+  StreamSubscription? _stateSub;
+  StreamSubscription? _posSub;
+  StreamSubscription? _durSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _stateSub = _player.playerStateStream.listen((s) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = s.playing;
+        _isLoading = s.processingState == ProcessingState.loading ||
+            s.processingState == ProcessingState.buffering;
+      });
+      if (s.playing) {
+        _waveAnim.repeat(reverse: true);
+      } else {
+        _waveAnim.stop();
+      }
+      if (s.processingState == ProcessingState.completed) {
+        _player.seek(Duration.zero);
+        _player.pause();
+        setState(() => _position = Duration.zero);
+      }
+    });
+
+    _posSub = _player.positionStream.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+
+    _durSub = _player.durationStream.listen((d) {
+      if (mounted) setState(() => _duration = d ?? Duration.zero);
+    });
+  }
+
+  @override
+  void dispose() {
+    _waveAnim.dispose();
+    _stateSub?.cancel();
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_isPlaying) {
+      await _player.pause();
+    } else {
+      if (_player.processingState == ProcessingState.idle) {
+        setState(() => _isLoading = true);
+        try {
+          await _player.setUrl(widget.message.content);
+        } catch (_) {
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+      await _player.play();
+    }
+  }
+
+  double get _progress {
+    if (_duration.inMilliseconds == 0) return 0;
+    return (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString();
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg          = widget.isMine ? AppTheme.primary : AppTheme.surface;
+    final activeColor = widget.isMine ? Colors.white : AppTheme.primary;
+    final inactiveClr = widget.isMine ? Colors.white38 : Colors.white24;
+    const textColor   = Colors.white;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.only(
+          topLeft:     const Radius.circular(18),
+          topRight:    const Radius.circular(18),
+          bottomLeft:  Radius.circular(widget.isMine ? 18 : 4),
+          bottomRight: Radius.circular(widget.isMine ? 4 : 18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:      Colors.black.withAlpha(40),
+            blurRadius: 6,
+            offset:     const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.block_rounded,
-              size: 14, color: Colors.white.withAlpha(100)),
-          const SizedBox(width: 5),
-          Text("O'chirilgan xabar.",
-              style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.white.withAlpha(120))),
-          const SizedBox(width: 8),
-          Text(timeStr,
-              style: TextStyle(
-                  fontSize: 11, color: Colors.white.withAlpha(80))),
+          // Sender name (group chat)
+          if (widget.showSenderName)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                widget.message.senderName,
+                style: TextStyle(
+                  color:      activeColor,
+                  fontSize:   12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+          // Reply preview
+          if (widget.message.replyToId != null)
+            _ReplyPreview(
+              senderName: widget.message.replyToSender ?? '',
+              content:    widget.message.replyToContent ?? '',
+              isMine:     widget.isMine,
+            ),
+
+          // Player row
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Play/Pause button
+              GestureDetector(
+                onTap: _toggle,
+                child: Container(
+                  width:  42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(30),
+                    shape: BoxShape.circle,
+                  ),
+                  child: _isLoading
+                      ? const Padding(
+                    padding: EdgeInsets.all(11),
+                    child:   CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color:       Colors.white,
+                    ),
+                  )
+                      : Icon(
+                    _isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: textColor,
+                    size:  24,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Waveform + slider
+              SizedBox(
+                width: 160,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _WaveformBars(
+                      progress:      _progress,
+                      isPlaying:     _isPlaying,
+                      activeColor:   activeColor,
+                      inactiveColor: inactiveClr,
+                      animation:     _waveAnim,
+                    ),
+                    const SizedBox(height: 2),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight:        2,
+                        thumbShape:         const RoundSliderThumbShape(
+                            enabledThumbRadius: 5),
+                        overlayShape:       SliderComponentShape.noOverlay,
+                        activeTrackColor:   activeColor,
+                        inactiveTrackColor: inactiveClr,
+                        thumbColor:         activeColor,
+                      ),
+                      child: Slider(
+                        value:     _progress,
+                        onChanged: (v) {
+                          _player.seek(Duration(
+                            milliseconds:
+                            (v * _duration.inMilliseconds).round(),
+                          ));
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Duration + time + read status
+          Padding(
+            padding: const EdgeInsets.only(left: 50, top: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isPlaying || _position > Duration.zero
+                      ? _fmt(_position)
+                      : _fmt(_duration),
+                  style: TextStyle(
+                    color:    textColor.withAlpha(180),
+                    fontSize: 11,
+                  ),
+                ),
+                _TimeStatus(
+                  time:   _fmtTime(widget.message.timestamp),
+                  isMine: widget.isMine,
+                  isRead: widget.message.isRead,
+                  color:  textColor.withAlpha(180),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -161,72 +364,164 @@ class _DeletedContent extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Matn xabari
+//  Waveform bars animatsiyasi
 // ═══════════════════════════════════════════════════════════════════════════════
-class _TextContent extends StatelessWidget {
+class _WaveformBars extends StatelessWidget {
+  final double              progress;
+  final bool                isPlaying;
+  final Color               activeColor;
+  final Color               inactiveColor;
+  final AnimationController animation;
+
+  const _WaveformBars({
+    required this.progress,
+    required this.isPlaying,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.animation,
+  });
+
+  static const _heights = [
+    5.0, 10.0, 7.0, 14.0, 9.0, 18.0, 12.0, 16.0, 7.0,
+    20.0, 9.0, 15.0, 11.0, 18.0, 7.0, 13.0, 17.0, 9.0,
+    15.0, 11.0, 19.0, 7.0, 13.0, 16.0, 5.0, 9.0, 14.0,
+    11.0, 7.0, 13.0,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder:   (_, __) => SizedBox(
+        height: 22,
+        child:  Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: List.generate(_heights.length, (i) {
+            final barPct = i / _heights.length;
+            final isPast = barPct <= progress;
+            double h     = _heights[i];
+            if (isPlaying && (barPct - progress).abs() < 0.12) {
+              h = h * (0.65 + 0.35 * animation.value);
+            }
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 80),
+                  height:   h,
+                  decoration: BoxDecoration(
+                    color:        isPast ? activeColor : inactiveColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Text bubble
+// ═══════════════════════════════════════════════════════════════════════════════
+class _TextBubble extends StatelessWidget {
   final Message message;
-  final String  timeStr;
   final bool    isMine;
   final bool    showSenderName;
 
-  const _TextContent({
+  const _TextBubble({
     required this.message,
-    required this.timeStr,
     required this.isMine,
     required this.showSenderName,
   });
 
-  static const _nameColors = [
-    Color(0xFF6C63FF), Color(0xFF00D4AA), Color(0xFFFF6584),
-    Color(0xFFFFB347), Color(0xFF4FC3F7), Color(0xFFAB47BC),
-  ];
-
-  Color _nameColor(String name) =>
-      _nameColors[name.hashCode.abs() % _nameColors.length];
-
   @override
   Widget build(BuildContext context) {
-    final hasReply = message.replyToId != null &&
-        (message.replyToContent?.isNotEmpty ?? false);
+    final bg = isMine ? AppTheme.primary : AppTheme.surface;
 
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.only(
+          topLeft:     const Radius.circular(18),
+          topRight:    const Radius.circular(18),
+          bottomLeft:  Radius.circular(isMine ? 18 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:      Colors.black.withAlpha(40),
+            blurRadius: 6,
+            offset:     const Offset(0, 2),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-
-          // ── Guruhda kim yozgani ──────────────────────────────────────────
-          if (showSenderName) ...[
-            Text(message.senderName,
+          // Group: sender name
+          if (showSenderName)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                message.senderName,
                 style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _nameColor(message.senderName))),
-            const SizedBox(height: 3),
-          ],
-
-          // ── Reply preview ────────────────────────────────────────────────
-          if (hasReply)
-            _ReplyPreview(
-              sender:  message.replyToSender ?? '',
-              content: message.replyToContent ?? '',
-              isMine:  isMine,
+                  color:      isMine ? Colors.white70 : AppTheme.primary,
+                  fontSize:   12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
 
-          // ── Matn + vaqt + galochka ───────────────────────────────────────
-          Wrap(
-            alignment:      WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.end,
+          // Reply preview
+          if (message.replyToId != null)
+            _ReplyPreview(
+              senderName: message.replyToSender ?? '',
+              content:    message.replyToContent ?? '',
+              isMine:     isMine,
+            ),
+
+          // Content + time in one row
+          Row(
+            mainAxisSize:       MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(message.content,
+              Flexible(
+                child: Text(
+                  message.isEdited
+                      ? '${message.content}  '
+                      : message.content,
                   style: const TextStyle(
-                      fontSize: 15, color: Colors.white, height: 1.4)),
-              const SizedBox(width: 6),
-              _MetaRow(
-                timeStr:  timeStr,
-                isMine:   isMine,
-                isRead:   message.isRead,
-                isEdited: message.isEdited,
+                    color:    Colors.white,
+                    fontSize: 14.5,
+                    height:   1.35,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.isEdited)
+                    Text(
+                      'tahrirlangan  ',
+                      style: TextStyle(
+                        color:     Colors.white.withAlpha(140),
+                        fontSize:  10,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  _TimeStatus(
+                    time:   _fmtTime(message.timestamp),
+                    isMine: isMine,
+                    isRead: message.isRead,
+                    color:  Colors.white60,
+                  ),
+                ],
               ),
             ],
           ),
@@ -237,56 +532,178 @@ class _TextContent extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Reply preview (xabar ichida)
+//  Image bubble
 // ═══════════════════════════════════════════════════════════════════════════════
-class _ReplyPreview extends StatelessWidget {
-  final String sender;
-  final String content;
-  final bool   isMine;
+class _ImageBubble extends StatelessWidget {
+  final Message message;
+  final bool    isMine;
+  final bool    showSenderName;
 
-  const _ReplyPreview({
-    required this.sender,
-    required this.content,
+  const _ImageBubble({
+    required this.message,
     required this.isMine,
+    required this.showSenderName,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft:     const Radius.circular(18),
+          topRight:    const Radius.circular(18),
+          bottomLeft:  Radius.circular(isMine ? 18 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:      Colors.black.withAlpha(40),
+            blurRadius: 6,
+            offset:     const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Image.network(
+            message.content,
+            fit:   BoxFit.cover,
+            width: double.infinity,
+            errorBuilder: (_, __, ___) => Container(
+              width:  180,
+              height: 180,
+              color:  AppTheme.surfaceLight,
+              child:  const Icon(Icons.broken_image_outlined,
+                  color: AppTheme.textSecondary),
+            ),
+            loadingBuilder: (_, child, progress) => progress == null
+                ? child
+                : Container(
+              width:  180,
+              height: 180,
+              color:  AppTheme.surfaceLight,
+              child:  const Center(
+                  child: CircularProgressIndicator()),
+            ),
+          ),
+          Positioned(
+            bottom: 6,
+            right:  8,
+            child: _TimeStatus(
+              time:       _fmtTime(message.timestamp),
+              isMine:     isMine,
+              isRead:     message.isRead,
+              color:      Colors.white,
+              withShadow: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Deleted bubble
+// ═══════════════════════════════════════════════════════════════════════════════
+class _DeletedBubble extends StatelessWidget {
+  final bool isMine;
+  const _DeletedBubble({required this.isMine});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isMine
-            ? Colors.white.withAlpha(25)
-            : Colors.black.withAlpha(30),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(
-          left: BorderSide(
-            color: isMine
-                ? Colors.white.withAlpha(180)
-                : AppTheme.primary,
-            width: 3,
+            ? AppTheme.primary.withAlpha(120)
+            : AppTheme.surface,
+        borderRadius: BorderRadius.only(
+          topLeft:     const Radius.circular(18),
+          topRight:    const Radius.circular(18),
+          bottomLeft:  Radius.circular(isMine ? 18 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 18),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.block_rounded,
+              size: 14, color: Colors.white.withAlpha(150)),
+          const SizedBox(width: 5),
+          Text(
+            "O'chirilgan xabar",
+            style: TextStyle(
+              color:     Colors.white.withAlpha(150),
+              fontSize:  13.5,
+              fontStyle: FontStyle.italic,
+            ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Reply preview — xabar ichida javob ko'rsatish
+//  Chat.dart dagi: replyToId, replyToContent, replyToSender ishlatiladi
+// ═══════════════════════════════════════════════════════════════════════════════
+class _ReplyPreview extends StatelessWidget {
+  final String senderName;
+  final String content;
+  final bool   isMine;
+
+  const _ReplyPreview({
+    required this.senderName,
+    required this.content,
+    required this.isMine,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = isMine ? Colors.white70 : AppTheme.primary;
+    final isAudio = content.contains('.m4a') ||
+        content.contains('.mp3') ||
+        content.contains('audio_');
+    final isImage = content.startsWith('http') &&
+        (content.contains('.jpg') ||
+            content.contains('.png') ||
+            content.contains('.jpeg') ||
+            content.contains('images'));
+
+    return Container(
+      margin:  const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      decoration: BoxDecoration(
+        color:        Colors.white.withAlpha(20),
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          left: BorderSide(color: accentColor, width: 3),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (sender.isNotEmpty)
-            Text(sender,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isMine
-                        ? Colors.white.withAlpha(220)
-                        : AppTheme.primary)),
-          const SizedBox(height: 1),
-          Text(content,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withAlpha(160))),
+          Text(
+            senderName,
+            style: TextStyle(
+              color:      accentColor,
+              fontSize:   11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            isAudio ? '🎤 Audio xabar' : isImage ? '📷 Rasm' : content,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:    Colors.white.withAlpha(180),
+              fontSize: 11.5,
+            ),
+          ),
         ],
       ),
     );
@@ -294,164 +711,52 @@ class _ReplyPreview extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Vaqt + galochka + tahrirlangan belgisi
+//  Vaqt + o'qilgan belgisi
 // ═══════════════════════════════════════════════════════════════════════════════
-class _MetaRow extends StatelessWidget {
-  final String timeStr;
+class _TimeStatus extends StatelessWidget {
+  final String time;
   final bool   isMine;
   final bool   isRead;
-  final bool   isEdited;   // ✅ Faqat DB dan true kelganda ko'rinadi
+  final Color  color;
+  final bool   withShadow;
 
-  const _MetaRow({
-    required this.timeStr,
+  const _TimeStatus({
+    required this.time,
     required this.isMine,
     required this.isRead,
-    required this.isEdited,
+    required this.color,
+    this.withShadow = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final shadows = withShadow
+        ? const [Shadow(color: Colors.black54, blurRadius: 4)]
+        : null;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // "Tahrirlangan" — faqat isEdited == true bo'lganda
-        if (isEdited) ...[
-          Text('tahrirlangan',
-              style: TextStyle(
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.white.withAlpha(120))),
-          const SizedBox(width: 3),
-        ],
-        Text(timeStr,
-            style: TextStyle(
-                fontSize: 11,
-                color: isMine
-                    ? Colors.white.withAlpha(153)
-                    : const Color(0xFF8899A6))),
+        Text(
+          time,
+          style: TextStyle(
+            color:    color,
+            fontSize: 10.5,
+            shadows:  shadows,
+          ),
+        ),
         if (isMine) ...[
           const SizedBox(width: 3),
           Icon(
-            isRead
-                ? Icons.done_all_rounded
-                : Icons.done_rounded,
-            size:  14,
-            color: isRead
-                ? const Color(0xFF6EC9CB)
-                : Colors.white.withAlpha(140),
+            isRead ? Icons.done_all_rounded : Icons.done_rounded,
+            size:  13,
+            color: isRead ? Colors.lightBlueAccent : color,
+            shadows: withShadow
+                ? const [Shadow(color: Colors.black54, blurRadius: 4)]
+                : null,
           ),
         ],
       ],
     );
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Rasm xabari
-// ═══════════════════════════════════════════════════════════════════════════════
-class _ImageContent extends StatelessWidget {
-  final String content;
-  final bool   isMine;
-  final String timeStr;
-  final bool   isRead;
-
-  const _ImageContent({
-    required this.content,
-    required this.isMine,
-    required this.timeStr,
-    required this.isRead,
-  });
-
-  String _extractUrl() {
-    try {
-      final data  = jsonDecode(content) as Map<String, dynamic>;
-      final value = (data['fileName'] as String? ?? '').trim();
-      if (value.isEmpty) return '';
-      if (value.startsWith('http')) return value;
-      return Supabase.instance.client.storage
-          .from('chat_images')
-          .getPublicUrl(value);
-    } catch (_) {}
-    final raw = content.trim();
-    if (raw.startsWith('http')) return raw;
-    return Supabase.instance.client.storage
-        .from('chat_images')
-        .getPublicUrl(raw);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final url = _extractUrl();
-    if (url.isEmpty) return _brokenImage();
-
-    return GestureDetector(
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(
-              builder: (_) => FullScreenImage(imageUrl: url))),
-      child: Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-                maxWidth: 260, minWidth: 120, minHeight: 80),
-            child: Image.network(
-              url,
-              fit: BoxFit.contain,
-              width: double.infinity,
-              loadingBuilder: (_, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  width: 220, height: 140,
-                  color: const Color(0xFF1E2C3A),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      value: progress.expectedTotalBytes != null
-                          ? progress.cumulativeBytesLoaded /
-                          progress.expectedTotalBytes!
-                          : null,
-                      strokeWidth: 2.5,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                );
-              },
-              errorBuilder: (_, __, ___) => _brokenImage(),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color:        Colors.black.withAlpha(120),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: _MetaRow(
-                timeStr:  timeStr,
-                isMine:   isMine,
-                isRead:   isRead,
-                isEdited: false,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _brokenImage() => Container(
-    width: 220, height: 140,
-    color: const Color(0xFF2A3A4A),
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.image_not_supported_rounded,
-            size: 40, color: Colors.white.withAlpha(100)),
-        const SizedBox(height: 8),
-        Text('Rasm yuklanmadi',
-            style: TextStyle(
-                fontSize: 12, color: Colors.white.withAlpha(120))),
-      ],
-    ),
-  );
 }

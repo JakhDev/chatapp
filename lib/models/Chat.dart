@@ -1,4 +1,4 @@
-enum MessageType { text, image }
+enum MessageType { text, image, audio }
 enum ChatType    { personal, group }
 
 // ── User ──────────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ class Message {
   final DateTime    timestamp;
   final bool        isRead;
   final bool        isEdited;
-  final bool        isDeleted; // Qo'shildi
+  final bool        isDeleted;
 
   final String?     replyToId;
   final String?     replyToContent;
@@ -61,7 +61,7 @@ class Message {
     DateTime?          timestamp,
     this.isRead        = false,
     this.isEdited      = false,
-    this.isDeleted     = false, // Constructorga qo'shildi
+    this.isDeleted     = false,
     this.replyToId,
     this.replyToContent,
     this.replyToSender,
@@ -108,7 +108,8 @@ class Message {
       senderId:       (j['senderid']   ?? j['senderId'])   as String? ?? '',
       senderName:     (j['sendername'] ?? j['senderName']) as String? ?? '',
       content:        j['content']  as String? ?? '',
-      type:           j['type'] == 'image' ? MessageType.image : MessageType.text,
+      type:           j['type'] == 'image' ? MessageType.image :
+      j['type'] == 'audio' ? MessageType.audio : MessageType.text,
       timestamp:      ts,
       isRead:         (j['isread']   ?? j['is_read']   ?? j['isRead'])   as bool? ?? false,
       isEdited:       (j['isedited'] ?? j['is_edited'] ?? j['isEdited']) as bool? ?? false,
@@ -124,7 +125,8 @@ class Message {
     'senderid':         senderId,
     'sendername':       senderName,
     'content':          content,
-    'type':             type == MessageType.image ? 'image' : 'text',
+    'type':             type == MessageType.image ? 'image' :
+    type == MessageType.audio ? 'audio' : 'text',
     'isread':           isRead,
     'is_edited':        isEdited,
     'is_deleted':       isDeleted,
@@ -133,6 +135,7 @@ class Message {
     'reply_to_sender':  replyToSender,
   };
 }
+
 // ── Chat ──────────────────────────────────────────────────────────────────────
 class Chat {
   final String        id;
