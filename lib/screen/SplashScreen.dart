@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-// Loyihangizdagi papka nomiga qarab 'screen' yoki 'screens' qilib tekshirib oling:
 import 'package:chatapp/screen/HomeScreen.dart';
 import 'package:chatapp/providers/AuthProvider.dart';
 import 'package:chatapp/providers/ChatProvider.dart';

@@ -212,7 +212,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Bekor',
+                    child: const Text('Bekor qilish',
                         style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontWeight: FontWeight.w600)),
@@ -270,7 +270,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Bekor',
+            child: const Text('Bekor qilish',
                 style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
@@ -377,8 +377,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final isGroup  = widget.chat.type == ChatType.group;
 
     return PopScope(
+      canPop: !_isSelectionMode, // Selection mode bo'lsa, avtomatik chiqib ketishni to'xtatamiz
       onPopInvokedWithResult: (didPop, _) {
-        if (_isSelectionMode) _cancelSelection();
+        if (_isSelectionMode) {
+          _cancelSelection(); // Birinchi bosishda tanlashni bekor qiladi
+          return;
+        }
         if (didPop) context.read<ChatProvider>().closeChat();
       },
       child: Scaffold(

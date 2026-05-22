@@ -145,7 +145,7 @@ class _DeletedContent extends StatelessWidget {
           Icon(Icons.block_rounded,
               size: 14, color: Colors.white.withAlpha(100)),
           const SizedBox(width: 5),
-          Text("Xabar o'chirildi",
+          Text("O'chirilgan xabar.",
               style: TextStyle(
                   fontSize: 14,
                   fontStyle: FontStyle.italic,
