@@ -22,7 +22,7 @@ class User {
     name:      j['name']      as String? ?? 'Foydalanuvchi',
     avatarUrl: j['avatarurl'] as String? ?? j['avatarUrl'] as String? ?? '',
     email:     j['email']     as String? ?? '',
-    isOnline:  j['isonline']  as bool?   ?? j['isOnline']  as bool? ?? false,
+    isOnline:  j['isonline']  as bool?   ?? j['isOnline'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -43,8 +43,13 @@ class Message {
   final String      content;
   final MessageType type;
   final DateTime    timestamp;
-  // ✅ final qilib o'zgartirdik — copyWith orqali yangilanadi
   final bool        isRead;
+  final bool        isEdited;
+  final bool        isDeleted; // Qo'shildi
+
+  final String?     replyToId;
+  final String?     replyToContent;
+  final String?     replyToSender;
 
   Message({
     required this.id,
@@ -52,12 +57,16 @@ class Message {
     required this.senderId,
     required this.senderName,
     required this.content,
-    this.type      = MessageType.text,
-    DateTime?      timestamp,
-    this.isRead    = false,
+    this.type          = MessageType.text,
+    DateTime?          timestamp,
+    this.isRead        = false,
+    this.isEdited      = false,
+    this.isDeleted     = false, // Constructorga qo'shildi
+    this.replyToId,
+    this.replyToContent,
+    this.replyToSender,
   }) : timestamp = timestamp ?? DateTime.now();
 
-  // ✅ QO'SHILDI — markAsRead da ishlatiladi
   Message copyWith({
     String?      id,
     String?      chatId,
@@ -67,46 +76,63 @@ class Message {
     MessageType? type,
     DateTime?    timestamp,
     bool?        isRead,
-  }) {
-    return Message(
-      id:         id         ?? this.id,
-      chatId:     chatId     ?? this.chatId,
-      senderId:   senderId   ?? this.senderId,
-      senderName: senderName ?? this.senderName,
-      content:    content    ?? this.content,
-      type:       type       ?? this.type,
-      timestamp:  timestamp  ?? this.timestamp,
-      isRead:     isRead     ?? this.isRead,
-    );
-  }
+    bool?        isEdited,
+    bool?        isDeleted,
+    String?      replyToId,
+    String?      replyToContent,
+    String?      replyToSender,
+  }) =>
+      Message(
+        id:             id             ?? this.id,
+        chatId:         chatId         ?? this.chatId,
+        senderId:       senderId       ?? this.senderId,
+        senderName:     senderName     ?? this.senderName,
+        content:        content        ?? this.content,
+        type:           type           ?? this.type,
+        timestamp:      timestamp      ?? this.timestamp,
+        isRead:         isRead         ?? this.isRead,
+        isEdited:       isEdited       ?? this.isEdited,
+        isDeleted:      isDeleted      ?? this.isDeleted,
+        replyToId:      replyToId      ?? this.replyToId,
+        replyToContent: replyToContent ?? this.replyToContent,
+        replyToSender:  replyToSender  ?? this.replyToSender,
+      );
 
   factory Message.fromJson(Map<String, dynamic> j) {
     final rawTs = j['created_at'] as String? ?? j['timestamp'] as String?;
-    final ts = rawTs != null ? DateTime.tryParse(rawTs) ?? DateTime.now() : DateTime.now();
+    final ts    = rawTs != null ? DateTime.tryParse(rawTs) ?? DateTime.now() : DateTime.now();
 
     return Message(
-      id:         j['id']?.toString() ?? '',
-      chatId:     (j['chatid']     ?? j['chatId'])     as String? ?? '',
-      senderId:   (j['senderid']   ?? j['senderId'])   as String? ?? '',
-      senderName: (j['sendername'] ?? j['senderName']) as String? ?? '',
-      content:    j['content']  as String? ?? '',
-      type:       j['type'] == 'image' ? MessageType.image : MessageType.text,
-      timestamp:  ts,
-      // ✅ Barcha mumkin bo'lgan ustun nomlarini tekshiradi
-      isRead:     (j['isread'] ?? j['is_read'] ?? j['isRead']) as bool? ?? false,
+      id:             j['id']?.toString() ?? '',
+      chatId:         (j['chatid']     ?? j['chatId'])     as String? ?? '',
+      senderId:       (j['senderid']   ?? j['senderId'])   as String? ?? '',
+      senderName:     (j['sendername'] ?? j['senderName']) as String? ?? '',
+      content:        j['content']  as String? ?? '',
+      type:           j['type'] == 'image' ? MessageType.image : MessageType.text,
+      timestamp:      ts,
+      isRead:         (j['isread']   ?? j['is_read']   ?? j['isRead'])   as bool? ?? false,
+      isEdited:       (j['isedited'] ?? j['is_edited'] ?? j['isEdited']) as bool? ?? false,
+      isDeleted:      (j['isdeleted'] ?? j['is_deleted'] ?? j['isDeleted']) as bool? ?? false,
+      replyToId:      j['reply_to_id']      as String?,
+      replyToContent: j['reply_to_content'] as String?,
+      replyToSender:  j['reply_to_sender']  as String?,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'chatid':     chatId,
-    'senderid':   senderId,
-    'sendername': senderName,
-    'content':    content,
-    'type':       type == MessageType.image ? 'image' : 'text',
-    'isread':     isRead,
+    'chatid':           chatId,
+    'senderid':         senderId,
+    'sendername':       senderName,
+    'content':          content,
+    'type':             type == MessageType.image ? 'image' : 'text',
+    'isread':           isRead,
+    'is_edited':        isEdited,
+    'is_deleted':       isDeleted,
+    'reply_to_id':      replyToId,
+    'reply_to_content': replyToContent,
+    'reply_to_sender':  replyToSender,
   };
 }
-
 // ── Chat ──────────────────────────────────────────────────────────────────────
 class Chat {
   final String        id;
