@@ -386,13 +386,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Chat history o'chirish?",
+        title: const Text("Chat tarixini tozalash?",
             style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700)),
         content: const Text(
-            "Bu amal qaytarib bo'lmaydi. Barcha xabarlar o'chiriladi.",
+            "Barcha xabarlar o'chiriladi.",
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
