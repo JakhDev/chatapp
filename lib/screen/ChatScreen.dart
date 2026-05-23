@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,8 +11,17 @@ import 'package:chatapp/widgets/AvatarWidget.dart';
 import 'package:chatapp/widgets/MessageBuble.dart';
 import 'package:chatapp/services/AudioService.dart';
 
+// ── Helper: timestamp → '14:38' (O'zbekiston vaqti UTC+5) ─────────────────────
+String _fmtTime(DateTime dt) {
+  final uzb = dt.toUtc().add(const Duration(hours: 5));
+  final h = uzb.hour.toString().padLeft(2, '0');
+  final m = uzb.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
 class ChatScreen extends StatefulWidget {
   final Chat chat;
+
   const ChatScreen({super.key, required this.chat});
 
   @override
@@ -25,17 +35,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _picker     = ImagePicker();
   final _audioSvc   = AudioService();
 
-  bool        _typing          = false;
+  bool        _typing             = false;
   Message?    _replyTo;
-  Set<String> _selected        = {};
-  bool        _isSelectionMode = false;
-  bool        _isRecording     = false;
-  Duration    _recordingDuration = Duration.zero;
+  Message?    _editingMsg;          // ← EDIT MODE STATE
+  Set<String> _selected           = {};
+  bool        _isSelectionMode    = false;
+  bool        _isRecording        = false;
+  Duration    _recordingDuration  = Duration.zero;
   Timer?      _recordTimer;
 
+  // ── Animatsiyalar ──────────────────────────────────────────────────────────
   late final AnimationController _recordAnim = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 800),
+    vsync: this, duration: const Duration(milliseconds: 900),
   )..repeat(reverse: true);
+
+  late final AnimationController _recordRippleAnim = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 1200),
+  );
+
+  late final AnimationController _inputHideAnim = AnimationController(
+    vsync: this, duration: const Duration(milliseconds: 250),
+    value: 1.0,
+  );
+
+  late final Animation<double> _inputFade =
+  CurvedAnimation(parent: _inputHideAnim, curve: Curves.easeInOut);
 
   @override
   void initState() {
@@ -57,24 +81,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollCtrl.dispose();
     _focusNode.dispose();
     _recordAnim.dispose();
+    _recordRippleAnim.dispose();
+    _inputHideAnim.dispose();
     _recordTimer?.cancel();
     _audioSvc.dispose();
     super.dispose();
   }
 
+  // ── Scroll ────────────────────────────────────────────────────────────────
   void _scrollToBottom() {
     if (_scrollCtrl.hasClients) {
-      _scrollCtrl.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      _scrollCtrl.animateTo(0,
+          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
   }
 
+  // ── FIXED: Send text + Edit ───────────────────────────────────────────────
   void _send() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
+
+    // ✅ AGAR EDIT MODE BO'LSA → TAHRIRLASH
+    if (_editingMsg != null) {
+      context.read<ChatProvider>().editMessage(
+          widget.chat.id, _editingMsg!.id, text, context);
+      _cancelEdit();
+      return;
+    }
+
+    // ✅ ODDIY XABAR
     context.read<ChatProvider>().sendText(
       widget.chat.id, text, widget.chat.name, context,
       replyTo: _replyTo,
@@ -84,44 +119,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
+  // ── Pick image ────────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
-    final src = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.camera_alt_outlined, color: AppTheme.primary),
-            title: const Text('Kamera',
-                style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined, color: AppTheme.accent),
-            title: const Text('Galereya',
-                style: TextStyle(color: AppTheme.textPrimary)),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-          ),
-        ]),
-      ),
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
     );
-    if (src == null) return;
-    final file = await _picker.pickImage(source: src, imageQuality: 80);
+
     if (file == null || !mounted) return;
     context.read<ChatProvider>().sendImage(
-        widget.chat.id, file, widget.chat.name, context);
+      widget.chat.id,
+      file,
+      widget.chat.name,
+      context,
+    );
   }
 
+  // ── Audio recording ───────────────────────────────────────────────────────
   Future<void> _startAudioRecording() async {
     final ok = await _audioSvc.startRecording();
-    if (!ok) return;
+    if (!ok || !mounted) return;
+
+    _inputHideAnim.reverse();
+    _recordRippleAnim.repeat();
+
     setState(() {
-      _isRecording       = true;
+      _isRecording      = true;
       _recordingDuration = Duration.zero;
     });
+
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() =>
       _recordingDuration += const Duration(seconds: 1));
@@ -130,9 +156,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   Future<void> _stopAudioRecording() async {
     _recordTimer?.cancel();
+    _recordRippleAnim.stop();
+    _recordRippleAnim.reset();
+    _inputHideAnim.forward();
+
     final path = await _audioSvc.stopRecording();
     setState(() => _isRecording = false);
     if (path == null || !mounted) return;
+
     context.read<ChatProvider>().sendAudio(
         widget.chat.id, path, widget.chat.name, context, widget.chat.name);
     _scrollToBottom();
@@ -140,13 +171,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   Future<void> _cancelAudioRecording() async {
     _recordTimer?.cancel();
+    _recordRippleAnim.stop();
+    _recordRippleAnim.reset();
+    _inputHideAnim.forward();
+
     await _audioSvc.cancelRecording();
     setState(() {
-      _isRecording       = false;
+      _isRecording      = false;
       _recordingDuration = Duration.zero;
     });
   }
 
+  // ── Selection ─────────────────────────────────────────────────────────────
   void _onLongPress(Message msg) {
     if (msg.id.startsWith('local_') || msg.isDeleted) return;
     final myId = context.read<ChatProvider>().currentUser?.id ?? '';
@@ -185,7 +221,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     Clipboard.setData(ClipboardData(text: texts));
     _cancelSelection();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content:  Text('Nusxa olindi'),
+      content: Text('Nusxa olindi'),
       duration: Duration(seconds: 1),
       behavior: SnackBarBehavior.floating,
     ));
@@ -211,8 +247,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             style: const TextStyle(color: AppTheme.textPrimary,
                 fontSize: 16, fontWeight: FontWeight.w700)),
         content: Text('$count ta xabar barcha uchun o\'chiriladi.',
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 14)),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -228,146 +263,141 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ── FIXED: Tap → Edit inline ──────────────────────────────────────────────
   void _onTap(Message msg, String myId) {
     if (_isSelectionMode) {
-      if (!msg.id.startsWith('local_') && !msg.isDeleted) _toggleSelect(msg.id);
+      if (!msg.id.startsWith('local_') &&
+          !msg.isDeleted && msg.senderId == myId) {
+        _toggleSelect(msg.id);
+      }
       return;
     }
+
+    // ✅ EDIT MODE AKTIVATION - ONLY TEXT MESSAGES
     if (msg.senderId == myId &&
         !msg.isDeleted &&
         msg.type == MessageType.text &&
         !msg.id.startsWith('local_')) {
-      _showEditDialog(msg);
+      _startEdit(msg);
+      // ✅ _cancelEdit() CHAQIRMAYDI - EDIT DAVOM ETADI
     }
   }
 
-  void _showEditDialog(Message msg) {
-    final ctrl = TextEditingController(text: msg.content);
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withAlpha(30),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.edit_rounded,
-                        color: AppTheme.primary, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text('Xabarni tahrirlash',
-                      style: TextStyle(color: AppTheme.textPrimary,
-                          fontSize: 16, fontWeight: FontWeight.w700)),
-                ]),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: ctrl,
-                  autofocus:  true,
-                  maxLines:   null,
-                  style: const TextStyle(
-                      color: AppTheme.textPrimary, fontSize: 15),
-                  decoration: InputDecoration(
-                    filled:    true,
-                    fillColor: AppTheme.surfaceLight,
-                    hintText:  'Xabarni kiriting...',
-                    hintStyle: const TextStyle(color: AppTheme.textSecondary),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(
-                            color: AppTheme.primary, width: 1.5)),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        backgroundColor: AppTheme.surfaceLight,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Bekor qilish',
-                          style: TextStyle(color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () {
-                        final t = ctrl.text.trim();
-                        if (t.isEmpty) return;
-                        context.read<ChatProvider>().editMessage(
-                            widget.chat.id, msg.id, t, context);
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Saqlash',
-                          style: TextStyle(color: Colors.white,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ),
-                ]),
-              ]),
-        ),
-      ),
-    );
+  // ── FIXED: Start Edit ─────────────────────────────────────────────────────
+  void _startEdit(Message msg) {
+    setState(() {
+      _editingMsg = msg;
+      _replyTo    = null;  // Reply yoki edit, ikkalasi emas
+      _textCtrl.text = msg.content;  // ← TEXT SET
+    });
+    // Keyboard acha
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _textCtrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: msg.content.length));
+      _focusNode.requestFocus();
+    });
   }
 
-  // 🎯 MORE MENU
-  void _showMoreMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-            title: const Text("Chat history o'chirish",
-                style: TextStyle(color: AppTheme.textPrimary)),
-            subtitle: const Text('Barcha xabarlar o\'chiriladi',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-            onTap: () {
-              Navigator.pop(ctx);
-              _confirmClearHistory();
-            },
+  // ── Cancel Edit ───────────────────────────────────────────────────────────
+  void _cancelEdit() {
+    setState(() {
+      _editingMsg = null;
+      _textCtrl.clear();
+    });
+    _focusNode.unfocus();
+  }
+
+  // ── Full screen image ─────────────────────────────────────────────────────
+  void _showFullScreenImage(String imagePath) {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
           ),
-          const Divider(height: 1, color: AppTheme.surfaceLight),
-          ListTile(
-            leading: const Icon(Icons.search_outlined, color: AppTheme.primary),
-            title: const Text('Izlash',
-                style: TextStyle(color: AppTheme.textPrimary)),
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            child: Image.network(imagePath, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    ));
+  }
+
+  // ── More menu ─────────────────────────────────────────────────────────────
+  void _showMoreMenu() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.black.withOpacity(0.3),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim, _, __) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5 * anim.value, sigmaY: 5 * anim.value),
+        child: Stack(children: [
+          GestureDetector(
             onTap: () => Navigator.pop(ctx),
+            child: Container(color: Colors.transparent),
+          ),
+          Positioned(
+            top: kToolbarHeight + MediaQuery.of(ctx).padding.top + 4,
+            right: 12,
+            child: ScaleTransition(
+              scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+              child: Opacity(
+                opacity: anim.value,
+                child: Material(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  elevation: 8,
+                  child: Container(
+                    width: 220,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      _menuItem(
+                        icon: Icons.delete_sweep_outlined,
+                        title: "Chat tozalash",
+                        color: Colors.redAccent,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _confirmClearHistory();
+                        },
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
           ),
         ]),
       ),
     );
   }
+
+  Widget _menuItem({
+    required IconData icon,
+    required String   title,
+    Color?            color,
+    VoidCallback?     onTap,
+  }) => InkWell(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(children: [
+        Icon(icon, size: 20, color: color ?? AppTheme.textPrimary),
+        const SizedBox(width: 12),
+        Text(title, style: TextStyle(
+            fontSize: 14,
+            color: color ?? AppTheme.textPrimary,
+            fontWeight: FontWeight.w500)),
+      ]),
+    ),
+  );
 
   void _confirmClearHistory() {
     showDialog(
@@ -378,7 +408,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         title: const Text("Chat history o'chirish?",
             style: TextStyle(color: AppTheme.textPrimary,
                 fontSize: 16, fontWeight: FontWeight.w700)),
-        content: const Text('Bu amal qaytarib bo\'lmaydi. Barcha xabarlar o\'chiriladi.',
+        content: const Text(
+            'Bu amal qaytarib bo\'lmaydi. Barcha xabarlar o\'chiriladi.',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
@@ -388,7 +419,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                context.read<ChatProvider>().clearChatHistory(widget.chat.id, context);
+                context.read<ChatProvider>()
+                    .clearChatHistory(widget.chat.id, context);
               },
               child: const Text("O'chirish",
                   style: TextStyle(color: Colors.redAccent,
@@ -398,8 +430,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ── AppBars ───────────────────────────────────────────────────────────────
   PreferredSizeWidget _normalAppBar() {
-    final isGroup = widget.chat.type == ChatType.group;
+    final isGroup   = widget.chat.type == ChatType.group;
+    final provider  = context.read<ChatProvider>();
+
+    final ids        = widget.chat.id.split('_');
+    final myId       = provider.currentUser?.id ?? '';
+    final otherId    = ids.firstWhere((id) => id != myId,
+        orElse: () => '');
+    final isOnline   = provider.isUserOnline(otherId);
+    final lastSeen   = provider.getLastSeen(otherId);
+
     return AppBar(
       backgroundColor: AppTheme.surface,
       elevation: 0,
@@ -412,61 +454,67 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         AvatarWidget(name: widget.chat.name, size: 38, isGroup: isGroup),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.chat.name,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: AppTheme.textPrimary,
-                    fontSize: 15, fontWeight: FontWeight.w600)),
-            const Text('Onlayn',
-                style: TextStyle(color: AppTheme.online, fontSize: 11)),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.chat.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppTheme.textPrimary,
+                      fontSize: 15, fontWeight: FontWeight.w600)),
+              if (!isGroup)
+                _OnlineStatus(
+                    isOnline: isOnline, lastSeen: lastSeen)
+              else
+                Text('${widget.chat.memberIds.length} a\'zo',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11)),
+            ],
+          ),
         ),
       ]),
       actions: [
-        // ➕ MORE BUTTON (Video va Call o'rniga)
         IconButton(
-            tooltip: "Batafsil",
-            icon: const Icon(Icons.more_vert_rounded,
-                color: AppTheme.textSecondary),
-            onPressed: _showMoreMenu),
+          tooltip: "Batafsil",
+          icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary),
+          onPressed: _showMoreMenu,
+        ),
       ],
     );
   }
 
-  PreferredSizeWidget _selectionAppBar() {
-    return AppBar(
-      backgroundColor: AppTheme.surface,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.close_rounded, color: Colors.white),
-        onPressed: _cancelSelection,
+  PreferredSizeWidget _selectionAppBar() => AppBar(
+    backgroundColor: AppTheme.surface,
+    elevation: 0,
+    leading: IconButton(
+      icon: const Icon(Icons.close_rounded, color: Colors.white),
+      onPressed: _cancelSelection,
+    ),
+    title: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 150),
+      child: Text(
+        '${_selected.length} ta tanlandi',
+        key: ValueKey(_selected.length),
+        style: const TextStyle(color: AppTheme.textPrimary,
+            fontSize: 16, fontWeight: FontWeight.w600),
       ),
-      title: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 150),
-        child: Text(
-          '${_selected.length} ta tanlandi',
-          key: ValueKey(_selected.length),
-          style: const TextStyle(color: AppTheme.textPrimary,
-              fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-      ),
-      actions: [
-        if (_selected.length == 1)
-          IconButton(
-            tooltip:  'Nusxa olish',
-            icon:     const Icon(Icons.copy_rounded, color: AppTheme.textSecondary),
-            onPressed: _copySelected,
-          ),
+    ),
+    actions: [
+      if (_selected.length == 1)
         IconButton(
-          tooltip:  "O'chirish",
-          icon:     const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-          onPressed: _confirmDelete,
+          tooltip: 'Nusxa olish',
+          icon: const Icon(Icons.copy_rounded, color: AppTheme.textSecondary),
+          onPressed: _copySelected,
         ),
-        const SizedBox(width: 4),
-      ],
-    );
-  }
+      IconButton(
+        tooltip: "O'chirish",
+        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+        onPressed: _confirmDelete,
+      ),
+      const SizedBox(width: 4),
+    ],
+  );
 
+  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
@@ -485,7 +533,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         appBar: _isSelectionMode ? _selectionAppBar() : _normalAppBar(),
         body: Column(children: [
 
-          // ── Messages list with date separators ──
+          // ── Messages ──
           Expanded(
             child: msgs.isEmpty
                 ? const _EmptyChat()
@@ -494,73 +542,52 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               reverse:    true,
               padding:    const EdgeInsets.symmetric(
                   horizontal: 4, vertical: 8),
-              itemCount:  msgs.length * 2, // Date separators uchun
+              itemCount: msgs.length,
               itemBuilder: (_, i) {
-                // Date separator
-                if (i % 2 == 0) {
-                  final msgIndex = (i ~/ 2);
-                  if (msgIndex >= msgs.length) return null;
-
-                  final msg = msgs[msgs.length - 1 - msgIndex];
-                  final showDate = msgIndex == msgs.length - 1 ||
-                      !_isSameDay(msg.timestamp,
-                          msgs[msgs.length - 2 - msgIndex].timestamp);
-
-                  if (!showDate) return const SizedBox.shrink();
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceLight,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _formatDate(msg.timestamp),
-                          style: const TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                // Message
-                final msgIndex = (i ~/ 2);
-                final index    = msgs.length - 1 - msgIndex;
-                final msg      = msgs[index];
-                final isMine   = msg.senderId == myId;
+                final index  = msgs.length - 1 - i;
+                final msg    = msgs[index];
+                final isMine = msg.senderId == myId;
                 final canSwipe = !_isSelectionMode &&
                     !msg.isDeleted &&
                     !msg.id.startsWith('local_');
 
-                return _SwipeableMessage(
-                  key:     ValueKey(msg.id),
-                  isMine:  isMine,
-                  enabled: canSwipe,
-                  onSwipe: () => setState(() => _replyTo = msg),
-                  child: MessageBubble(
-                    message:         msg,
-                    isMine:          isMine,
-                    showSenderName:  isGroup && !isMine,
-                    isSelected:      _selected.contains(msg.id),
-                    isSelectionMode: _isSelectionMode,
-                    onTap:           () => _onTap(msg, myId),
-                    onLongPress:     () => _onLongPress(msg),
-                  ),
+                final showDate = index == 0 ||
+                    !_isSameDay(msg.timestamp, msgs[index - 1].timestamp);
+
+                return Column(
+                  children: [
+                    if (showDate) _DateSeparator(date: msg.timestamp),
+                    _SwipeableMessage(
+                      key:     ValueKey(msg.id),
+                      isMine:  isMine,
+                      enabled: canSwipe,
+                      onSwipe: () => setState(() => _replyTo = msg),
+                      child: MessageBubble(
+                        message:         msg,
+                        isMine:          isMine,
+                        showSenderName:  isGroup && !isMine,
+                        isSelected:      _selected.contains(msg.id),
+                        isSelectionMode: _isSelectionMode,
+                        onTap:           () => _onTap(msg, myId),
+                        onLongPress:     () => _onLongPress(msg),
+                        onImageTap: _showFullScreenImage,
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
           ),
 
+          // ✅ Edit Banner
+          if (_editingMsg != null)
+            _EditBanner(
+              message:  _editingMsg!,
+              onCancel: _cancelEdit,
+            ),
+
           // ── Reply bar ──
-          if (_replyTo != null)
+          if (_replyTo != null && _editingMsg == null)  // ← Edit va reply birgalikda bo'lmassin
             _ReplyBar(
               message:  _replyTo!,
               onCancel: () => setState(() => _replyTo = null),
@@ -571,51 +598,122 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             controller:        _textCtrl,
             focusNode:         _focusNode,
             isTyping:          _typing,
-            onSend:            _send,
-            onPickImage:       _pickImage,
+            isEditing:         _editingMsg != null,  // ← EDIT FLAG
             isRecording:       _isRecording,
             recordingDuration: _recordingDuration,
+            recordAnimation:   _recordAnim,
+            recordRippleAnim:  _recordRippleAnim,
+            inputFade:         _inputFade,
+            onSend:            _send,
+            onPickImage:       _pickImage,
             onStartRecording:  _startAudioRecording,
             onStopRecording:   _stopAudioRecording,
             onCancelRecording: _cancelAudioRecording,
-            recordAnimation:   _recordAnim,
           ),
         ]),
       ),
     );
   }
 
-  // 📅 Kunlar ajratish uchun helper methods
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Online Status widget
+// ═══════════════════════════════════════════════════════════════════════════════
+class _OnlineStatus extends StatelessWidget {
+  final bool      isOnline;
+  final DateTime? lastSeen;
+
+  const _OnlineStatus({required this.isOnline, this.lastSeen});
+
+  String _formatLastSeen(DateTime dt) {
+    final now  = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final diff = now.difference(dt.toUtc().add(const Duration(hours: 5)));
+    if (diff.inMinutes < 1)  return 'Hozirgina';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} daqiqa oldin';
+    if (diff.inHours   < 24) return '${diff.inHours} soat oldin';
+    if (diff.inDays    < 7)  return '${diff.inDays} kun oldin';
+    final uzb = dt.toUtc().add(const Duration(hours: 5));
+    return '${uzb.day.toString().padLeft(2,'0')}.${uzb.month.toString().padLeft(2,'0')}.${uzb.year}';
   }
 
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final yesterday = now.subtract(const Duration(days: 1));
-
-    if (_isSameDay(dt, now)) {
-      return "Bugun";
-    } else if (_isSameDay(dt, yesterday)) {
-      return "Kecha";
-    } else if (dt.year == now.year) {
-      return "${_monthName(dt.month)} ${dt.day}";
-    } else {
-      return "${dt.day}.${dt.month}.${dt.year}";
+  @override
+  Widget build(BuildContext context) {
+    if (isOnline) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 7, height: 7,
+          decoration: const BoxDecoration(
+              color: AppTheme.online, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        const Text('Onlayn',
+            style: TextStyle(color: AppTheme.online, fontSize: 11)),
+      ]);
     }
-  }
 
-  String _monthName(int m) {
-    const names = [
-      'Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn',
-      'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek',
-    ];
-    return names[m - 1];
+    if (lastSeen != null) {
+      return Text(
+        _formatLastSeen(lastSeen!),
+        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+      );
+    }
+
+    return const Text('Oflayn',
+        style: TextStyle(color: AppTheme.textSecondary, fontSize: 11));
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Swipe-to-reply
+// Date Separator — UTC+5
+// ═══════════════════════════════════════════════════════════════════════════════
+class _DateSeparator extends StatelessWidget {
+  final DateTime date;
+  const _DateSeparator({required this.date});
+
+  String _format() {
+    final uzb = date.toUtc().add(const Duration(hours: 5));
+    final now       = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final yesterday = now.subtract(const Duration(days: 1));
+
+    if (_sameDay(uzb, now))       return 'Bugun';
+    if (_sameDay(uzb, yesterday)) return 'Kecha';
+    if (uzb.year == now.year) {
+      const m = ['','Yanvar','Fevral','Mart','Aprel','May','Iyun',
+        'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+      return '${uzb.day} ${m[uzb.month]}';
+    }
+    return '${uzb.day.toString().padLeft(2,'0')}.'
+        '${uzb.month.toString().padLeft(2,'0')}.'
+        '${uzb.year}';
+  }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(_format(),
+            style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12, fontWeight: FontWeight.w500)),
+      ),
+    ),
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Swipe-to-reply
 // ═══════════════════════════════════════════════════════════════════════════════
 class _SwipeableMessage extends StatefulWidget {
   final Widget       child;
@@ -655,14 +753,12 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
   }
 
   void _onEnd(DragEndDetails _) => setState(() {
-    _drag      = 0;
-    _triggered = false;
+    _drag = 0; _triggered = false;
   });
 
   @override
   Widget build(BuildContext context) {
     final progress = (_drag / _threshold).clamp(0.0, 1.0);
-
     return GestureDetector(
       onHorizontalDragUpdate: _onUpdate,
       onHorizontalDragEnd:    _onEnd,
@@ -681,16 +777,13 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
                   color: AppTheme.primary.withAlpha(30),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.reply_rounded,
-                    color: AppTheme.primary, size: 18),
+                child: const Icon(Icons.reply_rounded, color: AppTheme.primary, size: 18),
               ),
             ),
           ),
         ),
         AnimatedContainer(
-          duration: _drag == 0
-              ? const Duration(milliseconds: 200)
-              : Duration.zero,
+          duration: _drag == 0 ? const Duration(milliseconds: 200) : Duration.zero,
           curve: Curves.easeOut,
           transform: Matrix4.translationValues(_drag, 0, 0),
           child: widget.child,
@@ -701,19 +794,17 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Reply bar
+// Reply bar
 // ═══════════════════════════════════════════════════════════════════════════════
 class _ReplyBar extends StatelessWidget {
   final Message      message;
   final VoidCallback onCancel;
-
   const _ReplyBar({required this.message, required this.onCancel});
 
   @override
   Widget build(BuildContext context) {
     final isImage = message.type == MessageType.image;
     final isAudio = message.type == MessageType.audio;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
       decoration: const BoxDecoration(
@@ -721,43 +812,24 @@ class _ReplyBar extends StatelessWidget {
         border: Border(top: BorderSide(color: AppTheme.surfaceLight)),
       ),
       child: Row(children: [
-        Container(
-          width: 3, height: 42,
-          decoration: BoxDecoration(
-              color: AppTheme.primary,
-              borderRadius: BorderRadius.circular(2)),
-        ),
+        Container(width: 3, height: 42,
+            decoration: BoxDecoration(color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(message.senderName,
-                style: const TextStyle(
-                    color: AppTheme.primary,
-                    fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text(
-              isImage ? '📷 Rasm' : isAudio ? '🎤 Audio' : message.content,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  color: AppTheme.textSecondary, fontSize: 12),
-            ),
-          ]),
-        ),
-        if (isImage)
-          Container(
-            width: 36, height: 36,
-            margin: const EdgeInsets.only(right: 6),
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                color: AppTheme.surfaceLight),
-            child: const Icon(Icons.image_outlined,
-                color: AppTheme.textSecondary, size: 18),
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(message.senderName,
+              style: const TextStyle(color: AppTheme.primary,
+                  fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(
+            isImage ? '📷 Rasm' : isAudio ? '🎤 Audio' : message.content,
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
+        ])),
         IconButton(
-          icon: const Icon(Icons.close,
-              color: AppTheme.textSecondary, size: 18),
+          icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 18),
           onPressed: onCancel,
         ),
       ]),
@@ -766,16 +838,14 @@ class _ReplyBar extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Empty chat
+// Empty chat
 // ═══════════════════════════════════════════════════════════════════════════════
 class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
-
   @override
   Widget build(BuildContext context) => const Center(
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.chat_bubble_outline_rounded,
-          size: 56, color: AppTheme.textSecondary),
+      Icon(Icons.chat_bubble_outline_rounded, size: 56, color: AppTheme.textSecondary),
       SizedBox(height: 12),
       Text("Hali xabarlar yo'q",
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
@@ -787,105 +857,260 @@ class _EmptyChat extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Input bar
+// Input bar
 // ═══════════════════════════════════════════════════════════════════════════════
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode             focusNode;
   final bool                  isTyping;
-  final VoidCallback          onSend;
-  final VoidCallback          onPickImage;
+  final bool                  isEditing;        // ← NEW FLAG
   final bool                  isRecording;
   final Duration              recordingDuration;
+  final AnimationController   recordAnimation;
+  final AnimationController   recordRippleAnim;
+  final Animation<double>     inputFade;
+  final VoidCallback          onSend;
+  final VoidCallback          onPickImage;
   final VoidCallback          onStartRecording;
   final VoidCallback          onStopRecording;
   final VoidCallback          onCancelRecording;
-  final AnimationController   recordAnimation;
 
   const _InputBar({
     required this.controller,
     required this.focusNode,
     required this.isTyping,
-    required this.onSend,
-    required this.onPickImage,
+    required this.isEditing,
     required this.isRecording,
     required this.recordingDuration,
+    required this.recordAnimation,
+    required this.recordRippleAnim,
+    required this.inputFade,
+    required this.onSend,
+    required this.onPickImage,
     required this.onStartRecording,
     required this.onStopRecording,
     required this.onCancelRecording,
-    required this.recordAnimation,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color:   AppTheme.background,
+      color: AppTheme.background,
       padding: EdgeInsets.fromLTRB(
           8, 8, 8, MediaQuery.of(context).padding.bottom + 8),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        switchInCurve:  Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.1),
+              end:   Offset.zero,
+            ).animate(anim),
+            child: child,
+          ),
+        ),
+        child: isRecording
+            ? _RecordingBar(
+          key:        const ValueKey('rec'),
+          duration:   recordingDuration,
+          onStop:     onStopRecording,
+          onCancel:   onCancelRecording,
+          animation:  recordAnimation,
+          rippleAnim: recordRippleAnim,
+        )
+            : _NormalBar(
+          key:           const ValueKey('normal'),
+          controller:    controller,
+          focusNode:     focusNode,
+          isTyping:      isTyping,
+          isEditing:     isEditing,  // ← PASS FLAG
+          inputFade:     inputFade,
+          onSend:        onSend,
+          onPickImage:   onPickImage,
+          onStartRec:    onStartRecording,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Normal input ──────────────────────────────────────────────────────────────
+class _NormalBar extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode             focusNode;
+  final bool                  isTyping;
+  final bool                  isEditing;        // ← NEW
+  final Animation<double>     inputFade;
+  final VoidCallback          onSend;
+  final VoidCallback          onPickImage;
+  final VoidCallback          onStartRec;
+
+  const _NormalBar({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.isTyping,
+    required this.isEditing,
+    required this.inputFade,
+    required this.onSend,
+    required this.onPickImage,
+    required this.onStartRec,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      // ✅ EDIT MODE DA PHOTO BUTTON YASHIRILSIN
+      if (!isEditing)
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
           child: _CircleBtn(icon: Icons.add_rounded, onTap: onPickImage),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 120),
-            child: TextField(
-              focusNode:       focusNode,
-              controller:      controller,
-              maxLines:        null,
-              textInputAction: TextInputAction.newline,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 15),
-              decoration: InputDecoration(
-                hintText:  'Xabar yozing...',
-                hintStyle: const TextStyle(color: AppTheme.textSecondary),
-                filled:    true,
-                fillColor: AppTheme.surfaceLight,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.emoji_emotions_outlined,
-                      color: AppTheme.textSecondary, size: 20),
-                  onPressed: () {},
+      const SizedBox(width: 8),
+      Expanded(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 120),
+          child: TextField(
+            focusNode:       focusNode,
+            controller:      controller,
+            maxLines:        null,
+            textInputAction: TextInputAction.newline,
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+            decoration: InputDecoration(
+              hintText:  isEditing ? 'Xabarni tahrirlash...' : 'Xabar yozing...',
+              hintStyle: const TextStyle(color: AppTheme.textSecondary),
+              filled:    true,
+              fillColor: AppTheme.surfaceLight,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: _CircleBtn(
+          icon:      isTyping || isEditing ? Icons.send_rounded : Icons.mic_rounded,
+          isPrimary: true,
+          onTap:     isTyping || isEditing ? onSend : onStartRec,
+        ),
+      ),
+    ],
+  );
+}
+
+// ── Recording bar ─────────────────────────────────────────────────────────────
+class _RecordingBar extends StatelessWidget {
+  final Duration            duration;
+  final VoidCallback        onStop;
+  final VoidCallback        onCancel;
+  final AnimationController animation;
+  final AnimationController rippleAnim;
+
+  const _RecordingBar({
+    super.key,
+    required this.duration,
+    required this.onStop,
+    required this.onCancel,
+    required this.animation,
+    required this.rippleAnim,
+  });
+
+  String _fmt(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.inMinutes.remainder(60))}:${two(d.inSeconds.remainder(60))}';
+  }
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    GestureDetector(
+      onTap: onCancel,
+      child: Container(
+        width: 46, height: 46,
+        decoration: BoxDecoration(
+            color: Colors.red.withAlpha(200), shape: BoxShape.circle),
+        child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+      ),
+    ),
+    const SizedBox(width: 10),
+
+    Expanded(
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(23),
+        ),
+        child: Row(children: [
+          SizedBox(
+            width: 28, height: 28,
+            child: Stack(alignment: Alignment.center, children: [
+              AnimatedBuilder(
+                animation: rippleAnim,
+                builder: (_, __) => Transform.scale(
+                  scale: 1.0 + 0.8 * rippleAnim.value,
+                  child: Container(
+                    width: 20, height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.red.withOpacity(
+                          0.3 * (1 - rippleAnim.value)),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              AnimatedBuilder(
+                animation: animation,
+                builder: (_, __) => Container(
+                  width: 10, height: 10,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(
+                        0.6 + 0.4 * animation.value),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ]),
           ),
+          const SizedBox(width: 10),
+          Text(_fmt(duration),
+              style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 15, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          const Text('Bekor uchun chapga suring',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        ]),
+      ),
+    ),
+    const SizedBox(width: 10),
+
+    GestureDetector(
+      onTap: onStop,
+      child: Container(
+        width: 46, height: 46,
+        decoration: BoxDecoration(
+          color: AppTheme.primary, shape: BoxShape.circle,
+          boxShadow: [BoxShadow(
+              color:      AppTheme.primary.withAlpha(80),
+              blurRadius: 12, offset: const Offset(0, 4))],
         ),
-        const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            transitionBuilder: (child, anim) =>
-                ScaleTransition(scale: anim, child: child),
-            child: isRecording
-                ? _RecordingRow(
-              key:               const ValueKey('rec'),
-              duration:          recordingDuration,
-              onStop:            onStopRecording,
-              onCancel:          onCancelRecording,
-              animation:         recordAnimation,
-            )
-                : _CircleBtn(
-              key:       const ValueKey('btn'),
-              icon:      isTyping ? Icons.send_rounded : Icons.mic_rounded,
-              isPrimary: true,
-              onTap:     isTyping ? onSend : onStartRecording,
-            ),
-          ),
-        ),
-      ]),
-    );
-  }
+        child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+      ),
+    ),
+  ]);
 }
 
 // ── Circle button ─────────────────────────────────────────────────────────────
@@ -904,7 +1129,8 @@ class _CircleBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    child: Container(
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       width: 46, height: 46,
       decoration: BoxDecoration(
         color: isPrimary ? AppTheme.primary : AppTheme.surfaceLight,
@@ -912,87 +1138,61 @@ class _CircleBtn extends StatelessWidget {
         boxShadow: isPrimary
             ? [BoxShadow(
             color:      AppTheme.primary.withAlpha(80),
-            blurRadius: 12,
-            offset:     const Offset(0, 4))]
+            blurRadius: 12, offset: const Offset(0, 4))]
             : null,
       ),
       child: Icon(icon,
           color: isPrimary ? Colors.white : AppTheme.textSecondary,
-          size:  22),
+          size: 22),
     ),
   );
 }
 
-// ── Recording row ─────────────────────────────────────────────────────────────
-class _RecordingRow extends StatelessWidget {
-  final Duration            duration;
-  final VoidCallback        onStop;
-  final VoidCallback        onCancel;
-  final AnimationController animation;
-
-  const _RecordingRow({
-    super.key,
-    required this.duration,
-    required this.onStop,
-    required this.onCancel,
-    required this.animation,
-  });
-
-  String _fmt(Duration d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inMinutes.remainder(60))}:${two(d.inSeconds.remainder(60))}';
-  }
+// ── Edit Banner ───────────────────────────────────────────────────────────────
+class _EditBanner extends StatelessWidget {
+  final Message      message;
+  final VoidCallback onCancel;
+  const _EditBanner({required this.message, required this.onCancel});
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      GestureDetector(
-        onTap: onCancel,
-        child: Container(
-          width: 42, height: 42,
-          decoration: BoxDecoration(
-              color: Colors.red.withAlpha(200),
-              shape: BoxShape.circle),
-          child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-        ),
-      ),
-      const SizedBox(width: 8),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+    decoration: const BoxDecoration(
+      color: AppTheme.surface,
+      border: Border(top: BorderSide(color: AppTheme.surfaceLight)),
+    ),
+    child: Row(children: [
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: 36, height: 36,
         decoration: BoxDecoration(
-            color: AppTheme.surfaceLight,
-            borderRadius: BorderRadius.circular(20)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          ScaleTransition(
-            scale: animation.drive(Tween(begin: 0.8, end: 1.0)),
-            child: Container(
-              width: 10, height: 10,
-              decoration: const BoxDecoration(
-                  color: Colors.red, shape: BoxShape.circle),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(_fmt(duration),
-              style: const TextStyle(color: AppTheme.textPrimary,
-                  fontSize: 14, fontWeight: FontWeight.w600)),
-        ]),
+          color: AppTheme.primary.withOpacity(0.15),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.edit_rounded, color: AppTheme.primary, size: 18),
       ),
-      const SizedBox(width: 8),
-      GestureDetector(
-        onTap: onStop,
-        child: Container(
-          width: 42, height: 42,
-          decoration: BoxDecoration(
-            color: AppTheme.primary,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(
-                color:      AppTheme.primary.withAlpha(80),
-                blurRadius: 12, offset: const Offset(0, 4))],
-          ),
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Xabarni tahrirlash',
+                style: TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 1),
+            Text(message.content,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12)),
+          ],
         ),
       ),
-    ],
+      IconButton(
+        icon: const Icon(Icons.close_rounded,
+            color: AppTheme.textSecondary, size: 20),
+        onPressed: onCancel,
+      ),
+    ]),
   );
 }

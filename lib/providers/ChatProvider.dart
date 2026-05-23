@@ -13,6 +13,8 @@ class ChatProvider extends ChangeNotifier {
   final WebSocketService _ws;
   StreamSubscription? _wsSub;
   sb.RealtimeChannel? _realtimeChannel;
+  sb.RealtimeChannel? _presenceChannel;
+  sb.RealtimeChannel? _clearHistoryChannel;
 
   User? _me;
   final List<Chat> _chats = [];
@@ -20,15 +22,23 @@ class ChatProvider extends ChangeNotifier {
   List<User> _allUsers = [];
   String? _activeChatId;
 
-  User? get currentUser => _me;
+  // Online status tracking
+  final Map<String, bool> _onlineStatuses = {};
+  final Map<String, DateTime> _lastSeenMap = {};
 
+  User? get currentUser => _me;
   List<User> get allUsers => List.unmodifiable(_allUsers);
+  Map<String, bool> get onlineStatuses => Map.unmodifiable(_onlineStatuses);
+  Map<String, DateTime> get lastSeenMap => Map.unmodifiable(_lastSeenMap);
+
+  bool isUserOnline(String userId) => _onlineStatuses[userId] ?? false;
+  DateTime? getLastSeen(String userId) => _lastSeenMap[userId];
 
   List<Chat> get chats {
     if (_searchQuery.isEmpty) return List.unmodifiable(_chats);
     return List.unmodifiable(
       _chats.where(
-        (c) => c.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            (c) => c.name.toLowerCase().contains(_searchQuery.toLowerCase()),
       ),
     );
   }
@@ -45,16 +55,16 @@ class ChatProvider extends ChangeNotifier {
     if (sbUser != null) {
       final name =
           sbUser.userMetadata?['full_name'] as String? ??
-          sbUser.userMetadata?['name'] as String? ??
-          sbUser.email ??
-          'User';
+              sbUser.userMetadata?['name'] as String? ??
+              sbUser.email ??
+              'User';
       _loginWithId(sbUser.id, name);
     }
   }
 
   List<Message> messages(String chatId) {
     final chat = _chats.firstWhere(
-      (c) => c.id == chatId,
+          (c) => c.id == chatId,
       orElse: () =>
           Chat(id: '', name: '', type: ChatType.personal, memberIds: []),
     );
@@ -70,10 +80,108 @@ class ChatProvider extends ChangeNotifier {
     _me = User(id: id, name: name, isOnline: true);
     _ws.connect(_me!.id);
     _subscribeRealtime();
+    _subscribePresence();
+    _subscribeClearHistory();
     notifyListeners();
     loadAllUsers();
     _saveUserToDb(id, name);
     loadOldMessages();
+  }
+
+  // ─── Presence (online/offline) ────────────────────────────────────────────
+  void _subscribePresence() {
+    _presenceChannel?.unsubscribe();
+    if (_me == null) return;
+
+    _presenceChannel = sb.Supabase.instance.client
+        .channel('online_users')
+        .onPresenceSync((payload) {
+      final state = _presenceChannel?.presenceState() ?? {};
+      final onlineIds = <String>{};
+      // final state = _presenceChannel?.presenceState() ?? {};
+
+      (state as Map).forEach((key, value) {
+        final presences = value as List;
+
+        for (final p in presences) {
+          final payload = p.payload as Map<String, dynamic>;
+          final userId = payload['user_id']?.toString();
+
+          if (userId != null) {
+            onlineIds.add(userId);
+          }
+        }
+      });
+      for (final u in _allUsers) {
+        _onlineStatuses[u.id] = onlineIds.contains(u.id);
+      }
+      notifyListeners();
+    })
+        .onPresenceJoin((payload) {
+      final userId = payload.newPresences.isNotEmpty
+          ? payload.newPresences.first.payload['user_id'] as String?
+          : null;
+      if (userId != null) {
+        _onlineStatuses[userId] = true;
+        notifyListeners();
+      }
+    })
+        .onPresenceLeave((payload) {
+      final userId = payload.leftPresences.isNotEmpty
+          ? payload.leftPresences.first.payload['user_id'] as String?
+          : null;
+      if (userId != null) {
+        _onlineStatuses[userId] = false;
+        _lastSeenMap[userId] = DateTime.now();
+        // Update last_seen in DB
+        _updateLastSeen(userId);
+        notifyListeners();
+      }
+    });
+
+    _presenceChannel?.subscribe((status, error) async {
+      if (status == sb.RealtimeSubscribeStatus.subscribed) {
+        await _presenceChannel?.track({'user_id': _me!.id});
+      }
+    });
+  }
+
+  Future<void> _updateLastSeen(String userId) async {
+    try {
+      await sb.Supabase.instance.client
+          .from('users')
+          .update({'last_seen': DateTime.now().toUtc().toIso8601String()})
+          .eq('id', userId);
+    } catch (e) {
+      if (kDebugMode) print('🚨 _updateLastSeen: $e');
+    }
+  }
+
+  // ─── Clear history broadcast channel ─────────────────────────────────────
+  void _subscribeClearHistory() {
+    _clearHistoryChannel?.unsubscribe();
+    _clearHistoryChannel = sb.Supabase.instance.client
+        .channel('clear_history_events')
+        .onBroadcast(
+      event: 'clear_history',
+      callback: (payload) {
+        final chatId = payload['chat_id'] as String?;
+        if (chatId == null) return;
+        _applyClearHistory(chatId);
+      },
+    )
+        .subscribe();
+  }
+
+  void _applyClearHistory(String chatId) {
+    final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (chatIdx != -1) {
+      _chats[chatIdx].messages.clear();
+      _chats[chatIdx].lastMessage = null;
+      _chats[chatIdx].lastMessageTime = null;
+      _chats[chatIdx].unreadCount = 0;
+      notifyListeners();
+    }
   }
 
   void _subscribeRealtime() {
@@ -81,17 +189,17 @@ class ChatProvider extends ChangeNotifier {
     _realtimeChannel = sb.Supabase.instance.client
         .channel('public:messages')
         .onPostgresChanges(
-          event: sb.PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'messages',
-          callback: (p) => _onRealtimeMessage(p.newRecord),
-        )
+      event: sb.PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'messages',
+      callback: (p) => _onRealtimeMessage(p.newRecord),
+    )
         .onPostgresChanges(
-          event: sb.PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'messages',
-          callback: (p) => _onRealtimeUpdate(p.newRecord),
-        );
+      event: sb.PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'messages',
+      callback: (p) => _onRealtimeUpdate(p.newRecord),
+    );
     _realtimeChannel?.subscribe();
   }
 
@@ -130,9 +238,12 @@ class ChatProvider extends ChangeNotifier {
     if (chatId.isEmpty || content.isEmpty) return;
 
     final rawTs = row['created_at'] as String? ?? row['timestamp'] as String?;
-    final ts = rawTs != null
-        ? DateTime.tryParse(rawTs) ?? DateTime.now()
-        : DateTime.now();
+    // Convert to UZB time (UTC+5)
+    final utcTime = rawTs != null
+        ? DateTime.tryParse(rawTs)?.toUtc() ?? DateTime.now().toUtc()
+        : DateTime.now().toUtc();
+    final ts = utcTime.add(const Duration(hours: 5));
+
     final isImage = _isImageContent(content);
     final isAudio = row['type'] == 'audio';
 
@@ -163,8 +274,8 @@ class ChatProvider extends ChangeNotifier {
       final chat = _chats[chatIdx];
 
       final pendingIdx = chat.messages.indexWhere(
-        (m) =>
-            m.id == msgId ||
+            (m) =>
+        m.id == msgId ||
             (m.id.startsWith('local_') &&
                 m.content == content &&
                 m.senderId == senderId),
@@ -190,7 +301,7 @@ class ChatProvider extends ChangeNotifier {
       final idList = chatId.split('_');
       final otherId = idList.first == _me!.id ? idList.last : idList.first;
       final other = _allUsers.firstWhere(
-        (u) => u.id == otherId,
+            (u) => u.id == otherId,
         orElse: () => User(
           id: otherId,
           name: senderName.isNotEmpty ? senderName : 'Foydalanuvchi',
@@ -263,16 +374,16 @@ class ChatProvider extends ChangeNotifier {
   void closeChat() => _activeChatId = null;
 
   Future<void> sendText(
-    String chatId,
-    String text,
-    String chatName,
-    BuildContext context, {
-    Message? replyTo,
-  }) async {
+      String chatId,
+      String text,
+      String chatName,
+      BuildContext context, {
+        Message? replyTo,
+      }) async {
     if (_me == null || text.trim().isEmpty) return;
     final cleanText = text.trim();
-    final timeNow = DateTime.now();
-    // local_ prefix — DB ga id YUBORILAMAYDI (BIGINT auto-increment)
+    // Use UZB time (UTC+5)
+    final timeNow = DateTime.now().toUtc().add(const Duration(hours: 5));
     final localId = 'local_${timeNow.millisecondsSinceEpoch}';
 
     final localMsg = Message(
@@ -314,32 +425,30 @@ class ChatProvider extends ChangeNotifier {
     );
 
     try {
-      // id YO'Q — DB o'zi BIGINT generatsiya qiladi
       final rows = await sb.Supabase.instance.client
           .from('messages')
           .insert({
-            'chatid': chatId,
-            'senderid': _me!.id,
-            'sendername': _me!.name,
-            'content': cleanText,
-            'type': 'text',
-            'isread': false,
-            'is_edited': false,
-            'is_deleted': false,
-            if (replyTo != null) 'reply_to_id': replyTo.id,
-            if (replyTo != null) 'reply_to_content': replyTo.content,
-            if (replyTo != null) 'reply_to_sender': replyTo.senderName,
-          })
+        'chatid': chatId,
+        'senderid': _me!.id,
+        'sendername': _me!.name,
+        'content': cleanText,
+        'type': 'text',
+        'isread': false,
+        'is_edited': false,
+        'is_deleted': false,
+        if (replyTo != null) 'reply_to_id': replyTo.id,
+        if (replyTo != null) 'reply_to_content': replyTo.content,
+        if (replyTo != null) 'reply_to_sender': replyTo.senderName,
+      })
           .select('id')
           .maybeSingle();
 
-      // ✅ DB qaytargan real id bilan local xabarni almashtirish
       final realId = rows?['id']?.toString() ?? '';
       if (realId.isNotEmpty) {
         final chatIdx = _chats.indexWhere((c) => c.id == chatId);
         if (chatIdx != -1) {
           final idx = _chats[chatIdx].messages.indexWhere(
-            (m) => m.id == localId,
+                (m) => m.id == localId,
           );
           if (idx != -1) {
             _chats[chatIdx].messages[idx] = _chats[chatIdx].messages[idx]
@@ -351,19 +460,18 @@ class ChatProvider extends ChangeNotifier {
     } catch (e) {
       if (kDebugMode) print('⚠️ Full insert failed, fallback: $e');
       try {
-        // Fallback: reply ustunlari DB da yo'q bo'lsa
         final rows2 = await sb.Supabase.instance.client
             .from('messages')
             .insert({
-              'chatid': chatId,
-              'senderid': _me!.id,
-              'sendername': _me!.name,
-              'content': cleanText,
-              'type': 'text',
-              'isread': false,
-              'is_edited': false,
-              'is_deleted': false,
-            })
+          'chatid': chatId,
+          'senderid': _me!.id,
+          'sendername': _me!.name,
+          'content': cleanText,
+          'type': 'text',
+          'isread': false,
+          'is_edited': false,
+          'is_deleted': false,
+        })
             .select('id')
             .maybeSingle();
 
@@ -372,7 +480,7 @@ class ChatProvider extends ChangeNotifier {
           final chatIdx = _chats.indexWhere((c) => c.id == chatId);
           if (chatIdx != -1) {
             final idx = _chats[chatIdx].messages.indexWhere(
-              (m) => m.id == localId,
+                  (m) => m.id == localId,
             );
             if (idx != -1) {
               _chats[chatIdx].messages[idx] = _chats[chatIdx].messages[idx]
@@ -383,7 +491,6 @@ class ChatProvider extends ChangeNotifier {
         }
       } catch (e2) {
         if (kDebugMode) print('🚨 sendText error: $e2');
-        // Yuborilmagan xabarni UI dan olib tashlash
         final chatIdx = _chats.indexWhere((c) => c.id == chatId);
         if (chatIdx != -1) {
           _chats[chatIdx].messages.removeWhere((m) => m.id == localId);
@@ -403,25 +510,23 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> editMessage(
-    String chatId,
-    String messageId,
-    String newContent,
-    BuildContext context,
-  ) async {
+      String chatId,
+      String messageId,
+      String newContent,
+      BuildContext context,
+      ) async {
     if (_me == null || newContent.trim().isEmpty) return;
-    // Hali DB ga yetib bormagan xabar — edit qilib bo'lmaydi
     if (messageId.startsWith('local_')) return;
 
     final chatIdx = _chats.indexWhere((c) => c.id == chatId);
     if (chatIdx == -1) return;
     final msgIdx = _chats[chatIdx].messages.indexWhere(
-      (m) => m.id == messageId,
+          (m) => m.id == messageId,
     );
     if (msgIdx == -1) return;
     final old = _chats[chatIdx].messages[msgIdx];
     if (old.senderId != _me!.id) return;
 
-    // Optimistic update
     _chats[chatIdx].messages[msgIdx] = old.copyWith(
       content: newContent.trim(),
       isEdited: true,
@@ -429,14 +534,12 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await sb.Supabase.instance.client
+      await sb.Supabase.instance.client
           .from('messages')
           .update({'content': newContent.trim(), 'is_edited': true})
           .eq('id', messageId);
-      if (kDebugMode) print('✅ editMessage result: $result');
     } catch (e) {
       if (kDebugMode) print('🚨 editMessage error: $e');
-      // Rollback
       _chats[chatIdx].messages[msgIdx] = old;
       notifyListeners();
       if (context.mounted)
@@ -451,12 +554,11 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> deleteMessage(
-    String chatId,
-    String messageId,
-    BuildContext context,
-  ) async {
+      String chatId,
+      String messageId,
+      BuildContext context,
+      ) async {
     if (_me == null) return;
-    // Hali DB ga yetib bormagan xabar — UI dan olib tashlash yetarli
     if (messageId.startsWith('local_')) {
       final chatIdx = _chats.indexWhere((c) => c.id == chatId);
       if (chatIdx != -1) {
@@ -469,26 +571,25 @@ class ChatProvider extends ChangeNotifier {
     final chatIdx = _chats.indexWhere((c) => c.id == chatId);
     if (chatIdx == -1) return;
     final msgIdx = _chats[chatIdx].messages.indexWhere(
-      (m) => m.id == messageId,
+          (m) => m.id == messageId,
     );
     if (msgIdx == -1) return;
     final old = _chats[chatIdx].messages[msgIdx];
     if (old.senderId != _me!.id) return;
 
-    // Optimistic update
     _chats[chatIdx].messages[msgIdx] = old.copyWith(
       isDeleted: true,
       content: '',
     );
     final lastVisible = _chats[chatIdx].messages.lastWhere(
-      (m) => !m.isDeleted,
+          (m) => !m.isDeleted,
       orElse: () => old,
     );
     _chats[chatIdx].lastMessage = lastVisible.isDeleted
         ? "Xabar o'chirildi"
         : (lastVisible.type == MessageType.image
-              ? '📷 Rasm'
-              : lastVisible.content);
+        ? '📷 Rasm'
+        : lastVisible.content);
     notifyListeners();
 
     try {
@@ -498,7 +599,6 @@ class ChatProvider extends ChangeNotifier {
           .eq('id', messageId);
     } catch (e) {
       if (kDebugMode) print('🚨 deleteMessage error: $e');
-      // Rollback
       _chats[chatIdx].messages[msgIdx] = old;
       notifyListeners();
       if (context.mounted)
@@ -513,11 +613,11 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> sendImage(
-    String chatId,
-    XFile xFile,
-    String senderName,
-    BuildContext context,
-  ) async {
+      String chatId,
+      XFile xFile,
+      String senderName,
+      BuildContext context,
+      ) async {
     try {
       final path = 'chat_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
       await sb.Supabase.instance.client.storage
@@ -547,21 +647,58 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  // 🎤 Audio xabarni yuborish
+  // 🎤 Audio — optimistic UI: tezda chatda paydo bo'lsin
   Future<void> sendAudio(
-    String chatId,
-    String audioPath,
-    String senderName,
-    BuildContext context,
-    String chatName,
-  ) async {
-    try {
-      if (_me == null || audioPath.isEmpty) return;
+      String chatId,
+      String audioPath,
+      String senderName,
+      BuildContext context,
+      String chatName,
+      ) async {
+    if (_me == null || audioPath.isEmpty) return;
 
-      // Audio faylni storage ga yuklash
+    // 1️⃣ Optimistic local message — darhol UI da ko'rinsin
+    final timeNow = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final localId = 'local_audio_${timeNow.millisecondsSinceEpoch}';
+    const placeholderUrl = '__uploading__';
+
+    final localMsg = Message(
+      id: localId,
+      chatId: chatId,
+      senderId: _me!.id,
+      senderName: senderName,
+      content: placeholderUrl,
+      type: MessageType.audio,
+      timestamp: timeNow,
+      isRead: false,
+      isEdited: false,
+      isDeleted: false,
+    );
+
+    int chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (chatIdx == -1) {
+      _chats.insert(
+        0,
+        Chat(
+          id: chatId,
+          name: chatName,
+          type: ChatType.personal,
+          memberIds: [_me!.id],
+          messages: [],
+        ),
+      );
+      chatIdx = 0;
+    }
+    _chats[chatIdx].messages.add(localMsg);
+    _chats[chatIdx].lastMessage = '🎤 Audio';
+    _chats[chatIdx].lastMessageTime = timeNow;
+    _sortChats();
+    notifyListeners();
+
+    try {
+      // 2️⃣ Storage ga yuklash
       final fileName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final storagePath = 'chat_audio/$fileName';
-
       final file = File(audioPath);
       final bytes = await file.readAsBytes();
 
@@ -573,55 +710,50 @@ class ChatProvider extends ChangeNotifier {
           .from('chat_bucket')
           .getPublicUrl(storagePath);
 
-      // Audio xabar DB ga saqlash
+      // 3️⃣ Local message ni real URL bilan yangilash
+      final ci = _chats.indexWhere((c) => c.id == chatId);
+      if (ci != -1) {
+        final mi = _chats[ci].messages.indexWhere((m) => m.id == localId);
+        if (mi != -1) {
+          _chats[ci].messages[mi] = _chats[ci].messages[mi].copyWith(
+            content: audioUrl,
+          );
+          notifyListeners();
+        }
+      }
+
+      // 4️⃣ DB ga saqlash
       final result = await sb.Supabase.instance.client
           .from('messages')
           .insert({
-            'chatid': chatId,
-            'senderid': _me!.id,
-            'sendername': senderName,
-            'content': audioUrl,
-            'type': 'audio',
-            'isread': false,
-            'is_edited': false,
-            'is_deleted': false,
-          })
+        'chatid': chatId,
+        'senderid': _me!.id,
+        'sendername': senderName,
+        'content': audioUrl,
+        'type': 'audio',
+        'isread': false,
+        'is_edited': false,
+        'is_deleted': false,
+      })
           .select('id')
           .maybeSingle();
 
+      // 5️⃣ Real ID bilan almashtirish
       if (result != null) {
-        final newMsg = Message(
-          id: result['id']?.toString() ?? '',
-          chatId: chatId,
-          senderId: _me!.id,
-          senderName: senderName,
-          content: audioUrl,
-          type: MessageType.audio,
-          timestamp: DateTime.now(),
-          isRead: false,
-          isEdited: false,
-          isDeleted: false,
-        );
-
-        int chatIdx = _chats.indexWhere((c) => c.id == chatId);
-        if (chatIdx == -1) {
-          _chats.insert(
-            0,
-            Chat(
-              id: chatId,
-              name: chatName,
-              type: ChatType.personal,
-              memberIds: [_me!.id],
-              messages: [newMsg],
-            ),
-          );
-        } else {
-          _chats[chatIdx].messages.add(newMsg);
+        final realId = result['id']?.toString() ?? '';
+        if (realId.isNotEmpty) {
+          final ci2 = _chats.indexWhere((c) => c.id == chatId);
+          if (ci2 != -1) {
+            final mi2 = _chats[ci2].messages.indexWhere((m) => m.id == localId);
+            if (mi2 != -1) {
+              _chats[ci2].messages[mi2] = _chats[ci2].messages[mi2].copyWith(id: realId);
+              notifyListeners();
+            }
+          }
         }
-        notifyListeners();
       }
 
-      // WebSocket orqali real-time yuborish
+      // 6️⃣ WebSocket broadcast
       _ws.sendMessage(
         chatId: chatId,
         senderId: _me!.id,
@@ -630,6 +762,12 @@ class ChatProvider extends ChangeNotifier {
         type: MessageType.audio,
       );
     } catch (e) {
+      // Yuborilmagan audio ni UI dan olib tashlash
+      final ci = _chats.indexWhere((c) => c.id == chatId);
+      if (ci != -1) {
+        _chats[ci].messages.removeWhere((m) => m.id == localId);
+        notifyListeners();
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -666,14 +804,17 @@ class ChatProvider extends ChangeNotifier {
 
         final rawTs =
             row['created_at'] as String? ?? row['timestamp'] as String?;
-        final ts = rawTs != null
-            ? DateTime.tryParse(rawTs) ?? DateTime.now()
-            : DateTime.now();
+        // UZB time (UTC+5)
+        final utcTime = rawTs != null
+            ? DateTime.tryParse(rawTs)?.toUtc() ?? DateTime.now().toUtc()
+            : DateTime.now().toUtc();
+        final ts = utcTime.add(const Duration(hours: 5));
+
         final isRead = row['isread'] == true;
         final isEdited = row['is_edited'] == true;
         final isDeleted = row['is_deleted'] == true;
         final isImage = _isImageContent(content);
-        final isAudio = row['type'] == 'audio'; // ← Qo'shish
+        final isAudio = row['type'] == 'audio';
 
         final isMine = senderId == _me!.id;
 
@@ -688,7 +829,6 @@ class ChatProvider extends ChangeNotifier {
               : isAudio
               ? MessageType.audio
               : MessageType.text,
-          // ← Updated
           timestamp: ts,
           isRead: isRead,
           isEdited: isEdited,
@@ -714,11 +854,11 @@ class ChatProvider extends ChangeNotifier {
             Chat(
               id: normalizedId,
               name:
-                  (userNames[otherId] ??
-                          (senderId == _me!.id
-                              ? 'Foydalanuvchi'
-                              : msg.senderName))
-                      .isEmpty
+              (userNames[otherId] ??
+                  (senderId == _me!.id
+                      ? 'Foydalanuvchi'
+                      : msg.senderName))
+                  .isEmpty
                   ? 'Foydalanuvchi'
                   : (userNames[otherId] ?? msg.senderName),
               type: ChatType.personal,
@@ -736,7 +876,7 @@ class ChatProvider extends ChangeNotifier {
         }
         _chats[chatIdx].lastMessage = isDeleted
             ? "Xabar o'chirildi"
-            : (isImage ? '📷 Rasm' : content);
+            : (isImage ? '📷 Rasm' : isAudio ? '🎤 Audio' : content);
         _chats[chatIdx].lastMessageTime = ts;
       }
 
@@ -784,9 +924,10 @@ class ChatProvider extends ChangeNotifier {
           final senderId = row['senderid'] as String? ?? '';
           final isImage = _isImageContent(content);
           final rawTs = row['created_at'] as String?;
-          final ts = rawTs != null
-              ? DateTime.tryParse(rawTs) ?? DateTime.now()
-              : DateTime.now();
+          final utcTime = rawTs != null
+              ? DateTime.tryParse(rawTs)?.toUtc() ?? DateTime.now().toUtc()
+              : DateTime.now().toUtc();
+          final ts = utcTime.add(const Duration(hours: 5));
           final isRead = row['isread'] == true;
           final isEdited = row['is_edited'] == true;
           final isDeleted = row['is_deleted'] == true;
@@ -869,7 +1010,7 @@ class ChatProvider extends ChangeNotifier {
 
   void _sortChats() {
     _chats.sort(
-      (a, b) => (b.lastMessageTime ?? DateTime(0)).compareTo(
+          (a, b) => (b.lastMessageTime ?? DateTime(0)).compareTo(
         a.lastMessageTime ?? DateTime(0),
       ),
     );
@@ -877,16 +1018,27 @@ class ChatProvider extends ChangeNotifier {
 
   bool _isImageContent(String c) =>
       c.startsWith('http') &&
-      (c.contains('.jpg') || c.contains('.png') || c.contains('chat_images'));
+          (c.contains('.jpg') || c.contains('.png') || c.contains('chat_images'));
 
   Future<void> loadAllUsers() async {
     if (_me == null) return;
     try {
       final data = await sb.Supabase.instance.client
           .from('users')
-          .select('id, name, avatarurl, isonline')
+          .select('id, name, avatarurl, isonline, last_seen')
           .neq('id', _me!.id);
       _allUsers = data.map((r) => User.fromJson(r)).toList();
+      // Load last_seen times
+      for (final r in data) {
+        final uid = r['id'] as String?;
+        final ls = r['last_seen'] as String?;
+        if (uid != null && ls != null) {
+          final utc = DateTime.tryParse(ls)?.toUtc();
+          if (utc != null) {
+            _lastSeenMap[uid] = utc.add(const Duration(hours: 5));
+          }
+        }
+      }
       notifyListeners();
     } catch (e) {
       if (kDebugMode) print('🚨 loadAllUsers: $e');
@@ -896,20 +1048,14 @@ class ChatProvider extends ChangeNotifier {
   Future<void> _saveUserToDb(String id, String name) async {
     try {
       final avatar =
-          sb
-                  .Supabase
-                  .instance
-                  .client
-                  .auth
-                  .currentUser
-                  ?.userMetadata?['avatar_url']
-              as String? ??
-          '';
+          sb.Supabase.instance.client.auth.currentUser
+              ?.userMetadata?['avatar_url'] as String? ?? '';
       await sb.Supabase.instance.client.from('users').upsert({
         'id': id,
         'name': name,
         'avatarurl': avatar,
         'isonline': true,
+        'last_seen': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'id');
     } catch (e) {
       if (kDebugMode) print('🚨 _saveUserToDb: $e');
@@ -944,30 +1090,31 @@ class ChatProvider extends ChangeNotifier {
       if (kDebugMode) print('🚨 deleteUser: $e');
     }
   }
-// 🗑️ Chat history o'chirish
+
+  // 🗑️ Chat history o'chirish — barcha foydalanuvchilarda real-time ko'rinsin
   Future<void> clearChatHistory(String chatId, BuildContext context) async {
     try {
-      // Hamma xabarlarni delete qilish
+      // DB dan o'chirish
       await sb.Supabase.instance.client
           .from('messages')
           .delete()
           .eq('chatid', chatId);
 
-      // UI-ni yangilash
-      final chatIdx = _chats.indexWhere((c) => c.id == chatId);
-      if (chatIdx != -1) {
-        _chats[chatIdx].messages.clear();
-        _chats[chatIdx].lastMessage = null;
-        _chats[chatIdx].lastMessageTime = null;
-        _chats[chatIdx].unreadCount = 0;
-      }
+      // Broadcast — boshqa foydalanuvchilarga ham yuborish
+      await sb.Supabase.instance.client
+          .channel('clear_history_events')
+          .sendBroadcastMessage(
+        event: 'clear_history',
+        payload: {'chat_id': chatId},
+      );
 
-      notifyListeners();
+      // O'zimizda ham apply qilish
+      _applyClearHistory(chatId);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Chat history o\'chirildi'),
+            content: Text("Chat tarixi o'chirildi"),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 2),
           ),
@@ -985,15 +1132,25 @@ class ChatProvider extends ChangeNotifier {
       }
     }
   }
+
   Future<void> logout() async {
     try {
-      if (_me != null)
+      if (_me != null) {
         await sb.Supabase.instance.client
             .from('users')
-            .update({'isonline': false})
+            .update({
+          'isonline': false,
+          'last_seen': DateTime.now().toUtc().toIso8601String(),
+        })
             .eq('id', _me!.id);
+        await _presenceChannel?.untrack();
+      }
       _realtimeChannel?.unsubscribe();
+      _presenceChannel?.unsubscribe();
+      _clearHistoryChannel?.unsubscribe();
       _realtimeChannel = null;
+      _presenceChannel = null;
+      _clearHistoryChannel = null;
       await sb.Supabase.instance.client.auth.signOut();
       try {
         await GoogleSignIn().signOut();
@@ -1008,6 +1165,8 @@ class ChatProvider extends ChangeNotifier {
       _activeChatId = null;
       _chats.clear();
       _allUsers.clear();
+      _onlineStatuses.clear();
+      _lastSeenMap.clear();
       _searchQuery = '';
       notifyListeners();
     } catch (e) {
@@ -1019,6 +1178,8 @@ class ChatProvider extends ChangeNotifier {
   void dispose() {
     _wsSub?.cancel();
     _realtimeChannel?.unsubscribe();
+    _presenceChannel?.unsubscribe();
+    _clearHistoryChannel?.unsubscribe();
     super.dispose();
   }
 }
