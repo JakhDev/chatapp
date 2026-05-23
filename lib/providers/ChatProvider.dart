@@ -613,37 +613,97 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> sendImage(
-      String chatId,
-      XFile xFile,
-      String senderName,
-      BuildContext context,
+      String chatId, XFile xFile, String senderName, BuildContext context,
       ) async {
+    if (_me == null) return;
+
+    // ✅ 1. Darhol local xabar ko'rsatish
+    final timeNow = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final localId = 'local_img_${timeNow.millisecondsSinceEpoch}';
+
+    final localMsg = Message(
+      id:         localId,
+      chatId:     chatId,
+      senderId:   _me!.id,
+      senderName: senderName,
+      content:    '__uploading__',  // placeholder
+      type:       MessageType.image,
+      timestamp:  timeNow,
+      isRead:     false,
+      isEdited:   false,
+      isDeleted:  false,
+    );
+
+    int i = _chats.indexWhere((c) => c.id == chatId);
+    if (i == -1) {
+      _chats.insert(0, Chat(
+        id: chatId, name: senderName,
+        type: ChatType.personal, memberIds: [_me!.id],
+      ));
+      i = 0;
+    }
+    _addMsgAndFormat(_chats[i], localMsg);
+
     try {
-      final path = 'chat_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      // ✅ 2. Storage ga yuklash
+      final path  = 'chat_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final bytes = await xFile.readAsBytes();
+
       await sb.Supabase.instance.client.storage
-          .from('chat_bucket')
-          .uploadBinary(path, await xFile.readAsBytes());
+          .from('chat_bucket').uploadBinary(path, bytes);
+
       final url = sb.Supabase.instance.client.storage
-          .from('chat_bucket')
-          .getPublicUrl(path);
-      await sb.Supabase.instance.client.from('messages').insert({
-        'chatid': chatId,
-        'senderid': sb.Supabase.instance.client.auth.currentUser!.id,
+          .from('chat_bucket').getPublicUrl(path);
+
+      // ✅ 3. Local xabarni real URL bilan yangilash
+      final ci = _chats.indexWhere((c) => c.id == chatId);
+      if (ci != -1) {
+        final mi = _chats[ci].messages.indexWhere((m) => m.id == localId);
+        if (mi != -1) {
+          _chats[ci].messages[mi] = _chats[ci].messages[mi].copyWith(content: url);
+          notifyListeners();
+        }
+      }
+
+      // ✅ 4. DB ga saqlash
+      final result = await sb.Supabase.instance.client
+          .from('messages').insert({
+        'chatid':     chatId,
+        'senderid':   _me!.id,
         'sendername': senderName,
-        'content': url,
-        'type': 'image',
-        'isread': false,
-        'is_edited': false,
+        'content':    url,
+        'type':       'image',
+        'isread':     false,
+        'is_edited':  false,
         'is_deleted': false,
-      });
+      }).select('id').maybeSingle();
+
+      // ✅ 5. Real ID bilan almashtirish
+      if (result != null) {
+        final realId = result['id']?.toString() ?? '';
+        if (realId.isNotEmpty) {
+          final ci2 = _chats.indexWhere((c) => c.id == chatId);
+          if (ci2 != -1) {
+            final mi2 = _chats[ci2].messages.indexWhere((m) => m.id == localId);
+            if (mi2 != -1) {
+              _chats[ci2].messages[mi2] =
+                  _chats[ci2].messages[mi2].copyWith(id: realId);
+              notifyListeners();
+            }
+          }
+        }
+      }
     } catch (e) {
-      if (context.mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Rasm yuklanmadi: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      // Xato bo'lsa local xabarni olib tashlash
+      final ci = _chats.indexWhere((c) => c.id == chatId);
+      if (ci != -1) {
+        _chats[ci].messages.removeWhere((m) => m.id == localId);
+        notifyListeners();
+      }
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rasm yuklanmadi: $e'),
+              behavior: SnackBarBehavior.floating));
+      if (kDebugMode) print('🚨 sendImage: $e');
     }
   }
 

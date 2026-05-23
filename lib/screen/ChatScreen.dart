@@ -11,9 +11,8 @@ import 'package:chatapp/widgets/AvatarWidget.dart';
 import 'package:chatapp/widgets/MessageBuble.dart';
 import 'package:chatapp/services/AudioService.dart';
 
-// ── Helper: UTC → UTC+5 (O'zbekiston vaqti) ────────────────────────────────
 String _fmtTime(DateTime dt) {
-  final uzb = dt.toUtc().add(const Duration(hours: 0));
+  final uzb = dt.toUtc().add(const Duration(hours: 5));
   return '${uzb.hour.toString().padLeft(2, '0')}:${uzb.minute.toString().padLeft(2, '0')}';
 }
 
@@ -33,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _audioSvc   = AudioService();
 
   bool        _typing            = false;
+  bool        _showScrollButton   = false;  // ← Floating button state
   Message?    _replyTo;
   Message?    _editingMsg;
   Set<String> _selected          = {};
@@ -62,12 +62,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _textCtrl.addListener(
             () => setState(() => _typing = _textCtrl.text.trim().isNotEmpty));
 
+    // ✅ Floating button listener
+    _scrollCtrl.addListener(_onScroll);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().openChat(widget.chat.id);
       context.read<ChatProvider>().markAsRead(widget.chat.id);
       FocusScope.of(context).requestFocus(_focusNode);
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
     });
+  }
+
+  void _onScroll() {
+    // ✅ Show floating button when not at bottom
+    final atBottom = _scrollCtrl.offset <= 100;
+    if (_showScrollButton == atBottom) {
+      setState(() => _showScrollButton = !atBottom);
+    }
   }
 
   @override
@@ -87,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (_scrollCtrl.hasClients) {
       _scrollCtrl.animateTo(0,
           duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      setState(() => _showScrollButton = false);
     }
   }
 
@@ -402,8 +414,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                // clearChatHistory — Supabase realtime orqali
-                // ikkinchi foydalanuvchida ham avtomatik yangilanadi
                 context
                     .read<ChatProvider>()
                     .clearChatHistory(widget.chat.id, context);
@@ -427,7 +437,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final lastSeen = provider.getLastSeen(otherId);
 
     return AppBar(
-      backgroundColor: AppTheme.background,   // ← toolbar foni = background
+      backgroundColor: AppTheme.background,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 0,
@@ -512,7 +522,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final myId     = provider.currentUser?.id ?? '';
     final isGroup  = widget.chat.type == ChatType.group;
 
-    // ✅ O'chirilgan xabarlarni filtrlash
     final msgs = provider
         .messages(widget.chat.id)
         .where((m) => !m.isDeleted)
@@ -536,44 +545,65 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           Expanded(
             child: msgs.isEmpty
                 ? const _EmptyChat()
-                : ListView.builder(
-              controller: _scrollCtrl,
-              reverse:    true,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 4, vertical: 8),
-              itemCount: msgs.length,
-              itemBuilder: (_, i) {
-                final index  = msgs.length - 1 - i;
-                final msg    = msgs[index];
-                final isMine = msg.senderId == myId;
-                final canSwipe = !_isSelectionMode &&
-                    !msg.isDeleted &&
-                    !msg.id.startsWith('local_');
+                : Stack(
+              children: [
+                ListView.builder(
+                  controller: _scrollCtrl,
+                  reverse:    true,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 8),
+                  itemCount: msgs.length,
+                  itemBuilder: (_, i) {
+                    final index  = msgs.length - 1 - i;
+                    final msg    = msgs[index];
+                    final isMine = msg.senderId == myId;
+                    final canSwipe = !_isSelectionMode &&
+                        !msg.isDeleted &&
+                        !msg.id.startsWith('local_');
 
-                final showDate = index == 0 ||
-                    !_isSameDay(
-                        msg.timestamp, msgs[index - 1].timestamp);
+                    final showDate = index == 0 ||
+                        !_isSameDay(
+                            msg.timestamp, msgs[index - 1].timestamp);
 
-                return Column(children: [
-                  if (showDate) _DateSeparator(date: msg.timestamp),
-                  _SwipeableMessage(
-                    key:     ValueKey(msg.id),
-                    isMine:  isMine,
-                    enabled: canSwipe,
-                    onSwipe: () => setState(() => _replyTo = msg),
-                    child: MessageBubble(
-                      message:         msg,
-                      isMine:          isMine,
-                      showSenderName:  isGroup && !isMine,
-                      isSelected:      _selected.contains(msg.id),
-                      isSelectionMode: _isSelectionMode,
-                      onTap:           () => _onTap(msg, myId),
-                      onLongPress:     () => _onLongPress(msg),
-                      onImageTap:      _showFullScreenImage,
+                    return Column(children: [
+                      if (showDate) _DateSeparator(date: msg.timestamp),
+                      _SwipeableMessage(
+                        key:     ValueKey(msg.id),
+                        isMine:  isMine,
+                        enabled: canSwipe,
+                        onSwipe: () => setState(() => _replyTo = msg),
+                        child: MessageBubble(
+                          message:         msg,
+                          isMine:          isMine,
+                          showSenderName:  isGroup && !isMine,
+                          isSelected:      _selected.contains(msg.id),
+                          isSelectionMode: _isSelectionMode,
+                          onTap:           () => _onTap(msg, myId),
+                          onLongPress:     () => _onLongPress(msg),
+                          onImageTap:      _showFullScreenImage,
+                        ),
+                      ),
+                    ]);
+                  },
+                ),
+
+                // ✅ FLOATING SCROLL BUTTON
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: AnimatedScale(
+                    scale: _showScrollButton ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: FloatingActionButton(
+                      mini: true,
+                      backgroundColor: AppTheme.primary,
+                      onPressed: _scrollToBottom,
+                      child: const Icon(Icons.arrow_downward_rounded,
+                          color: Colors.white, size: 20),
                     ),
                   ),
-                ]);
-              },
+                ),
+              ],
             ),
           ),
 
@@ -614,9 +644,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Online Status — UTC+5
-// ═══════════════════════════════════════════════════════════════════════════════
+// Rest of the code (all the helper widgets) remains the same as before...
+// _OnlineStatus, _DateSeparator, _SwipeableMessage, _ReplyBar, _EmptyChat,
+// _InputBar, _NormalBar, _RecordingBar, _CircleBtn, _EditBanner
+
 class _OnlineStatus extends StatelessWidget {
   final bool      isOnline;
   final DateTime? lastSeen;
@@ -659,16 +690,13 @@ class _OnlineStatus extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Date Separator — UTC+5
-// ═══════════════════════════════════════════════════════════════════════════════
 class _DateSeparator extends StatelessWidget {
   final DateTime date;
   const _DateSeparator({required this.date});
 
   String _format() {
     final uzb = date.toUtc().add(const Duration(hours: 5));
-    final now = DateTime.now().toUtc().add(const Duration(hours: 0));
+    final now = DateTime.now().toUtc().add(const Duration(hours: 5));
     final yesterday = now.subtract(const Duration(days: 1));
 
     if (_sameDay(uzb, now))       return 'Bugun';
@@ -707,9 +735,6 @@ class _DateSeparator extends StatelessWidget {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Swipe-to-reply
-// ═══════════════════════════════════════════════════════════════════════════════
 class _SwipeableMessage extends StatefulWidget {
   final Widget       child;
   final bool         isMine;
@@ -790,9 +815,6 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Reply bar
-// ═══════════════════════════════════════════════════════════════════════════════
 class _ReplyBar extends StatelessWidget {
   final Message      message;
   final VoidCallback onCancel;
@@ -845,9 +867,6 @@ class _ReplyBar extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Empty chat
-// ═══════════════════════════════════════════════════════════════════════════════
 class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
   @override
@@ -869,9 +888,6 @@ class _EmptyChat extends StatelessWidget {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Input bar
-// ═══════════════════════════════════════════════════════════════════════════════
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode             focusNode;
@@ -1107,9 +1123,9 @@ class _RecordingBar extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
           const Spacer(),
-          const Text('Bekor uchun chapga suring',
+          const Text('Recording...',
               style: TextStyle(
-                  color: AppTheme.textSecondary, fontSize: 11)),
+                  color: AppTheme.textSecondary, fontSize: 14)),
         ]),
       ),
     ),

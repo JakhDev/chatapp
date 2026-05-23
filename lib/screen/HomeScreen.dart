@@ -26,7 +26,6 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    // Contacts sahifasi uchun darhol foydalanuvchilarni yuklash
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ChatProvider>().loadAllUsers();
     });
@@ -80,13 +79,12 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Barcha ekranlar uchun bir xil fon rangi
     const bgColor = AppTheme.background;
 
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: bgColor,   // ← toolbar = background rangi
+        backgroundColor: bgColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: AnimatedSwitcher(
@@ -208,7 +206,6 @@ class _HomeScreenState extends State<HomeScreen>
         selectedIndex: _selectedIndex,
         onTap: (index) {
           if (index == _selectedIndex) return;
-          // Contacts tab bosilganda foydalanuvchilarni yangilash
           if (index == 1) {
             context.read<ChatProvider>().loadAllUsers();
           }
@@ -240,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  ANIMATED BOTTOM NAV  (bir xil background rangi)
+//  ANIMATED BOTTOM NAV
 // ═══════════════════════════════════════════════════════════════════════════════
 class _AnimatedBottomNav extends StatelessWidget {
   final int selectedIndex;
@@ -264,7 +261,7 @@ class _AnimatedBottomNav extends StatelessWidget {
 
     return Container(
       decoration: const BoxDecoration(
-        color: AppTheme.background,   // ← bottomnav = background rangi
+        color: AppTheme.background,
         border: Border(
           top: BorderSide(color: AppTheme.surfaceLight, width: 0.5),
         ),
@@ -303,7 +300,6 @@ class _AnimatedBottomNav extends StatelessWidget {
                                   : AppTheme.textSecondary,
                               size: 24,
                             ),
-                            // Unread badge
                             if (i == 0 && unreadCount > 0)
                               Positioned(
                                 top: -8,
@@ -413,10 +409,9 @@ class _ChatsScreen extends StatelessWidget {
     );
   }
 
-  // O'zbekiston vaqti (UTC+5) formatlash
+  // UTC+5 vaqti
   String _fmt(DateTime? dt) {
     if (dt == null) return '';
-    // UTC+5 ga o'tkazish
     final t   = dt.toUtc().add(const Duration(hours: 5));
     final now = DateTime.now().toUtc().add(const Duration(hours: 5));
     final d   = now.difference(t);
@@ -431,9 +426,8 @@ class _ChatsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Faqat xabar almashilgan chatlar
-    final chats = context
-        .watch<ChatProvider>()
+    final provider = context.watch<ChatProvider>();
+    final chats = provider
         .chats
         .where((c) => c.lastMessage != null || c.lastMessageTime != null)
         .toList();
@@ -469,6 +463,13 @@ class _ChatsScreen extends StatelessWidget {
         final chat      = chats[i];
         final hasUnread = chat.unreadCount > 0;
 
+        // ✅ Real-time online status
+        final isGroup   = chat.type == ChatType.group;
+        final ids       = chat.id.split('_');
+        final myId      = provider.currentUser?.id ?? '';
+        final otherId   = ids.firstWhere((id) => id != myId, orElse: () => '');
+        final isOnline  = provider.isUserOnline(otherId);
+
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: Duration(milliseconds: 200 + i * 40),
@@ -495,9 +496,9 @@ class _ChatsScreen extends StatelessWidget {
                   AvatarWidget(
                       name: chat.name,
                       size: 52,
-                      isGroup: chat.type == ChatType.group,
-                      isOnline: chat.type != ChatType.group),
-                  if (chat.type != ChatType.group)
+                      isGroup: isGroup,
+                      isOnline: !isGroup && isOnline),  // ✅ Real-time
+                  if (!isGroup && isOnline)
                     Positioned(
                       bottom: 2,
                       right: 2,
@@ -583,7 +584,7 @@ class _ChatsScreen extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  CONTACTS SCREEN  — bazadagi BARCHA foydalanuvchilar
+//  CONTACTS SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 class _ContactsScreen extends StatefulWidget {
   const _ContactsScreen();
@@ -596,7 +597,6 @@ class _ContactsScreenState extends State<_ContactsScreen> {
   @override
   void initState() {
     super.initState();
-    // Sahifa ochilganda yangilash
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<ChatProvider>().loadAllUsers();
     });
@@ -655,8 +655,9 @@ class _ContactsScreenState extends State<_ContactsScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
     final myId     = sb.Supabase.instance.client.auth.currentUser?.id ?? '';
-    // O'zini ro'yxatdan chiqarib, barchani ko'rsatish
-    final users    = provider.allUsers.where((u) => u.id != myId).toList();
+    final users    = provider.allUsers
+        .where((u) => u.id != myId)
+        .toList();
 
     if (users.isEmpty) {
       return Center(
@@ -690,6 +691,9 @@ class _ContactsScreenState extends State<_ContactsScreen> {
       itemCount: users.length,
       itemBuilder: (ctx, i) {
         final u = users[i];
+        // ✅ Real-time online status
+        final isOnline = context.watch<ChatProvider>().isUserOnline(u.id);
+
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: Duration(milliseconds: 200 + i * 40),
@@ -702,13 +706,30 @@ class _ContactsScreenState extends State<_ContactsScreen> {
           child: ListTile(
             contentPadding:
             const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            leading:
-            AvatarWidget(name: u.name, size: 44, isOnline: u.isOnline),
+            leading: Stack(
+              children: [
+                AvatarWidget(name: u.name, size: 44, isOnline: isOnline),  // ✅
+                if (isOnline)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: AppTheme.online,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.background, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             title: Text(u.name,
                 style: const TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600)),
-            subtitle: u.isOnline
+            subtitle: isOnline
                 ? const Text('Onlayn',
                 style: TextStyle(color: AppTheme.online, fontSize: 11))
                 : null,
@@ -771,18 +792,6 @@ class _SettingsScreen extends StatelessWidget {
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
           subtitle: const Text('Uzbek',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-          onTap: () {},
-        ),
-        ListTile(
-          leading: const Icon(Icons.visibility_off_rounded,
-              color: AppTheme.primary),
-          title: const Text('Oxirgi faollik',
-              style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
-          subtitle: const Text('Barcha',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           onTap: () {},
         ),
