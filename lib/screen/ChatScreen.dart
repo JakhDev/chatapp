@@ -11,17 +11,14 @@ import 'package:chatapp/widgets/AvatarWidget.dart';
 import 'package:chatapp/widgets/MessageBuble.dart';
 import 'package:chatapp/services/AudioService.dart';
 
-// ── Helper: timestamp → '14:38' (O'zbekiston vaqti UTC+5) ─────────────────────
+// ── Helper: UTC → UTC+5 (O'zbekiston vaqti) ────────────────────────────────
 String _fmtTime(DateTime dt) {
-  final uzb = dt.toUtc().add(const Duration(hours: 5));
-  final h = uzb.hour.toString().padLeft(2, '0');
-  final m = uzb.minute.toString().padLeft(2, '0');
-  return '$h:$m';
+  final uzb = dt.toUtc().add(const Duration(hours: 0));
+  return '${uzb.hour.toString().padLeft(2, '0')}:${uzb.minute.toString().padLeft(2, '0')}';
 }
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
-
   const ChatScreen({super.key, required this.chat});
 
   @override
@@ -35,16 +32,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final _picker     = ImagePicker();
   final _audioSvc   = AudioService();
 
-  bool        _typing             = false;
+  bool        _typing            = false;
   Message?    _replyTo;
-  Message?    _editingMsg;          // ← EDIT MODE STATE
-  Set<String> _selected           = {};
-  bool        _isSelectionMode    = false;
-  bool        _isRecording        = false;
-  Duration    _recordingDuration  = Duration.zero;
+  Message?    _editingMsg;
+  Set<String> _selected          = {};
+  bool        _isSelectionMode   = false;
+  bool        _isRecording       = false;
+  Duration    _recordingDuration = Duration.zero;
   Timer?      _recordTimer;
 
-  // ── Animatsiyalar ──────────────────────────────────────────────────────────
   late final AnimationController _recordAnim = AnimationController(
     vsync: this, duration: const Duration(milliseconds: 900),
   )..repeat(reverse: true);
@@ -54,8 +50,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   );
 
   late final AnimationController _inputHideAnim = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 250),
-    value: 1.0,
+    vsync: this, duration: const Duration(milliseconds: 250), value: 1.0,
   );
 
   late final Animation<double> _inputFade =
@@ -88,7 +83,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // ── Scroll ────────────────────────────────────────────────────────────────
   void _scrollToBottom() {
     if (_scrollCtrl.hasClients) {
       _scrollCtrl.animateTo(0,
@@ -96,12 +90,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // ── FIXED: Send text + Edit ───────────────────────────────────────────────
   void _send() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
 
-    // ✅ AGAR EDIT MODE BO'LSA → TAHRIRLASH
     if (_editingMsg != null) {
       context.read<ChatProvider>().editMessage(
           widget.chat.id, _editingMsg!.id, text, context);
@@ -109,7 +101,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // ✅ ODDIY XABAR
     context.read<ChatProvider>().sendText(
       widget.chat.id, text, widget.chat.name, context,
       replyTo: _replyTo,
@@ -119,38 +110,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
   }
 
-  // ── Pick image ────────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
     final file = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-
+        source: ImageSource.gallery, imageQuality: 85);
     if (file == null || !mounted) return;
-    context.read<ChatProvider>().sendImage(
-      widget.chat.id,
-      file,
-      widget.chat.name,
-      context,
-    );
+    context.read<ChatProvider>()
+        .sendImage(widget.chat.id, file, widget.chat.name, context);
   }
 
-  // ── Audio recording ───────────────────────────────────────────────────────
   Future<void> _startAudioRecording() async {
     final ok = await _audioSvc.startRecording();
     if (!ok || !mounted) return;
-
     _inputHideAnim.reverse();
     _recordRippleAnim.repeat();
-
     setState(() {
-      _isRecording      = true;
+      _isRecording       = true;
       _recordingDuration = Duration.zero;
     });
-
     _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() =>
-      _recordingDuration += const Duration(seconds: 1));
+      if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
     });
   }
 
@@ -159,11 +137,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _recordRippleAnim.stop();
     _recordRippleAnim.reset();
     _inputHideAnim.forward();
-
     final path = await _audioSvc.stopRecording();
     setState(() => _isRecording = false);
     if (path == null || !mounted) return;
-
     context.read<ChatProvider>().sendAudio(
         widget.chat.id, path, widget.chat.name, context, widget.chat.name);
     _scrollToBottom();
@@ -174,15 +150,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _recordRippleAnim.stop();
     _recordRippleAnim.reset();
     _inputHideAnim.forward();
-
     await _audioSvc.cancelRecording();
     setState(() {
-      _isRecording      = false;
+      _isRecording       = false;
       _recordingDuration = Duration.zero;
     });
   }
 
-  // ── Selection ─────────────────────────────────────────────────────────────
   void _onLongPress(Message msg) {
     if (msg.id.startsWith('local_') || msg.isDeleted) return;
     final myId = context.read<ChatProvider>().currentUser?.id ?? '';
@@ -231,8 +205,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final ids = List<String>.from(_selected);
     _cancelSelection();
     for (final id in ids) {
-      await context.read<ChatProvider>().deleteMessage(
-          widget.chat.id, id, context);
+      await context.read<ChatProvider>()
+          .deleteMessage(widget.chat.id, id, context);
     }
   }
 
@@ -244,53 +218,55 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text("$count ta xabarni o'chirish",
-            style: const TextStyle(color: AppTheme.textPrimary,
-                fontSize: 16, fontWeight: FontWeight.w700)),
-        content: Text('$count ta xabar barcha uchun o\'chiriladi.',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+            style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700)),
+        content: Text("$count ta xabar barcha uchun o'chiriladi.",
+            style: const TextStyle(
+                color: AppTheme.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Bekor qilish',
                   style: TextStyle(color: AppTheme.textSecondary))),
           TextButton(
-              onPressed: () { Navigator.pop(ctx); _deleteSelected(); },
+              onPressed: () {
+                Navigator.pop(ctx);
+                _deleteSelected();
+              },
               child: const Text("O'chirish",
-                  style: TextStyle(color: Colors.redAccent,
+                  style: TextStyle(
+                      color: Colors.redAccent,
                       fontWeight: FontWeight.w700))),
         ],
       ),
     );
   }
 
-  // ── FIXED: Tap → Edit inline ──────────────────────────────────────────────
   void _onTap(Message msg, String myId) {
     if (_isSelectionMode) {
       if (!msg.id.startsWith('local_') &&
-          !msg.isDeleted && msg.senderId == myId) {
+          !msg.isDeleted &&
+          msg.senderId == myId) {
         _toggleSelect(msg.id);
       }
       return;
     }
-
-    // ✅ EDIT MODE AKTIVATION - ONLY TEXT MESSAGES
     if (msg.senderId == myId &&
         !msg.isDeleted &&
         msg.type == MessageType.text &&
         !msg.id.startsWith('local_')) {
       _startEdit(msg);
-      // ✅ _cancelEdit() CHAQIRMAYDI - EDIT DAVOM ETADI
     }
   }
 
-  // ── FIXED: Start Edit ─────────────────────────────────────────────────────
   void _startEdit(Message msg) {
     setState(() {
-      _editingMsg = msg;
-      _replyTo    = null;  // Reply yoki edit, ikkalasi emas
-      _textCtrl.text = msg.content;  // ← TEXT SET
+      _editingMsg    = msg;
+      _replyTo       = null;
+      _textCtrl.text = msg.content;
     });
-    // Keyboard acha
     Future.delayed(const Duration(milliseconds: 50), () {
       _textCtrl.selection = TextSelection.fromPosition(
           TextPosition(offset: msg.content.length));
@@ -298,7 +274,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
-  // ── Cancel Edit ───────────────────────────────────────────────────────────
   void _cancelEdit() {
     setState(() {
       _editingMsg = null;
@@ -307,28 +282,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _focusNode.unfocus();
   }
 
-  // ── Full screen image ─────────────────────────────────────────────────────
   void _showFullScreenImage(String imagePath) {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                child: Image.network(imagePath, fit: BoxFit.contain),
+              ),
+            ),
           ),
-        ),
-        body: Center(
-          child: InteractiveViewer(
-            child: Image.network(imagePath, fit: BoxFit.contain),
-          ),
-        ),
-      ),
-    ));
+        ));
   }
 
-  // ── More menu ─────────────────────────────────────────────────────────────
   void _showMoreMenu() {
     showGeneralDialog(
       context: context,
@@ -338,7 +313,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (_, __, ___) => const SizedBox.shrink(),
       transitionBuilder: (ctx, anim, _, __) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 5 * anim.value, sigmaY: 5 * anim.value),
+        filter:
+        ImageFilter.blur(sigmaX: 5 * anim.value, sigmaY: 5 * anim.value),
         child: Stack(children: [
           GestureDetector(
             onTap: () => Navigator.pop(ctx),
@@ -348,7 +324,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             top: kToolbarHeight + MediaQuery.of(ctx).padding.top + 4,
             right: 12,
             child: ScaleTransition(
-              scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+              scale: CurvedAnimation(
+                  parent: anim, curve: Curves.easeOutBack),
               child: Opacity(
                 opacity: anim.value,
                 child: Material(
@@ -358,17 +335,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   child: Container(
                     width: 220,
                     padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      _menuItem(
-                        icon: Icons.delete_sweep_outlined,
-                        title: "Chat tozalash",
-                        color: Colors.redAccent,
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _confirmClearHistory();
-                        },
-                      ),
-                    ]),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _menuItem(
+                            icon: Icons.delete_sweep_outlined,
+                            title: "Chat tozalash",
+                            color: Colors.redAccent,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _confirmClearHistory();
+                            },
+                          ),
+                        ]),
                   ),
                 ),
               ),
@@ -380,24 +359,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   Widget _menuItem({
-    required IconData icon,
-    required String   title,
-    Color?            color,
-    VoidCallback?     onTap,
-  }) => InkWell(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(children: [
-        Icon(icon, size: 20, color: color ?? AppTheme.textPrimary),
-        const SizedBox(width: 12),
-        Text(title, style: TextStyle(
-            fontSize: 14,
-            color: color ?? AppTheme.textPrimary,
-            fontWeight: FontWeight.w500)),
-      ]),
-    ),
-  );
+    required IconData    icon,
+    required String      title,
+    Color?               color,
+    VoidCallback?        onTap,
+  }) =>
+      InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Icon(icon, size: 20, color: color ?? AppTheme.textPrimary),
+            const SizedBox(width: 12),
+            Text(title,
+                style: TextStyle(
+                    fontSize: 14,
+                    color: color ?? AppTheme.textPrimary,
+                    fontWeight: FontWeight.w500)),
+          ]),
+        ),
+      );
 
   void _confirmClearHistory() {
     showDialog(
@@ -406,10 +387,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Chat history o'chirish?",
-            style: TextStyle(color: AppTheme.textPrimary,
-                fontSize: 16, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700)),
         content: const Text(
-            'Bu amal qaytarib bo\'lmaydi. Barcha xabarlar o\'chiriladi.',
+            "Bu amal qaytarib bo'lmaydi. Barcha xabarlar o'chiriladi.",
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
@@ -419,63 +402,67 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                context.read<ChatProvider>()
+                // clearChatHistory — Supabase realtime orqali
+                // ikkinchi foydalanuvchida ham avtomatik yangilanadi
+                context
+                    .read<ChatProvider>()
                     .clearChatHistory(widget.chat.id, context);
               },
               child: const Text("O'chirish",
-                  style: TextStyle(color: Colors.redAccent,
+                  style: TextStyle(
+                      color: Colors.redAccent,
                       fontWeight: FontWeight.w700))),
         ],
       ),
     );
   }
 
-  // ── AppBars ───────────────────────────────────────────────────────────────
   PreferredSizeWidget _normalAppBar() {
-    final isGroup   = widget.chat.type == ChatType.group;
-    final provider  = context.read<ChatProvider>();
-
-    final ids        = widget.chat.id.split('_');
-    final myId       = provider.currentUser?.id ?? '';
-    final otherId    = ids.firstWhere((id) => id != myId,
-        orElse: () => '');
-    final isOnline   = provider.isUserOnline(otherId);
-    final lastSeen   = provider.getLastSeen(otherId);
+    final isGroup  = widget.chat.type == ChatType.group;
+    final provider = context.read<ChatProvider>();
+    final ids      = widget.chat.id.split('_');
+    final myId     = provider.currentUser?.id ?? '';
+    final otherId  = ids.firstWhere((id) => id != myId, orElse: () => '');
+    final isOnline = provider.isUserOnline(otherId);
+    final lastSeen = provider.getLastSeen(otherId);
 
     return AppBar(
-      backgroundColor: AppTheme.surface,
+      backgroundColor: AppTheme.background,   // ← toolbar foni = background
       elevation: 0,
+      scrolledUnderElevation: 0,
       titleSpacing: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
         onPressed: () => Navigator.pop(context),
       ),
       title: Row(children: [
-        AvatarWidget(name: widget.chat.name, size: 38, isGroup: isGroup),
+        AvatarWidget(
+            name: widget.chat.name, size: 38, isGroup: isGroup),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.chat.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppTheme.textPrimary,
-                      fontSize: 15, fontWeight: FontWeight.w600)),
-              if (!isGroup)
-                _OnlineStatus(
-                    isOnline: isOnline, lastSeen: lastSeen)
-              else
-                Text('${widget.chat.memberIds.length} a\'zo',
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.chat.name,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 11)),
-            ],
-          ),
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+                if (!isGroup)
+                  _OnlineStatus(isOnline: isOnline, lastSeen: lastSeen)
+                else
+                  Text('${widget.chat.memberIds.length} a\'zo',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+              ]),
         ),
       ]),
       actions: [
         IconButton(
           tooltip: "Batafsil",
-          icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary),
+          icon: const Icon(Icons.more_vert_rounded,
+              color: AppTheme.textSecondary),
           onPressed: _showMoreMenu,
         ),
       ],
@@ -483,8 +470,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   PreferredSizeWidget _selectionAppBar() => AppBar(
-    backgroundColor: AppTheme.surface,
+    backgroundColor: AppTheme.background,
     elevation: 0,
+    scrolledUnderElevation: 0,
     leading: IconButton(
       icon: const Icon(Icons.close_rounded, color: Colors.white),
       onPressed: _cancelSelection,
@@ -494,38 +482,49 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       child: Text(
         '${_selected.length} ta tanlandi',
         key: ValueKey(_selected.length),
-        style: const TextStyle(color: AppTheme.textPrimary,
-            fontSize: 16, fontWeight: FontWeight.w600),
+        style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w600),
       ),
     ),
     actions: [
       if (_selected.length == 1)
         IconButton(
           tooltip: 'Nusxa olish',
-          icon: const Icon(Icons.copy_rounded, color: AppTheme.textSecondary),
+          icon: const Icon(Icons.copy_rounded,
+              color: AppTheme.textSecondary),
           onPressed: _copySelected,
         ),
       IconButton(
         tooltip: "O'chirish",
-        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+        icon: const Icon(Icons.delete_outline_rounded,
+            color: Colors.redAccent),
         onPressed: _confirmDelete,
       ),
       const SizedBox(width: 4),
     ],
   );
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
-    final msgs     = provider.messages(widget.chat.id);
     final myId     = provider.currentUser?.id ?? '';
     final isGroup  = widget.chat.type == ChatType.group;
+
+    // ✅ O'chirilgan xabarlarni filtrlash
+    final msgs = provider
+        .messages(widget.chat.id)
+        .where((m) => !m.isDeleted)
+        .toList();
 
     return PopScope(
       canPop: !_isSelectionMode,
       onPopInvokedWithResult: (didPop, _) {
-        if (_isSelectionMode) { _cancelSelection(); return; }
+        if (_isSelectionMode) {
+          _cancelSelection();
+          return;
+        }
         if (didPop) context.read<ChatProvider>().closeChat();
       },
       child: Scaffold(
@@ -533,14 +532,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         appBar: _isSelectionMode ? _selectionAppBar() : _normalAppBar(),
         body: Column(children: [
 
-          // ── Messages ──
+          // ── Messages ───────────────────────────────────────────────────
           Expanded(
             child: msgs.isEmpty
                 ? const _EmptyChat()
                 : ListView.builder(
               controller: _scrollCtrl,
               reverse:    true,
-              padding:    const EdgeInsets.symmetric(
+              padding: const EdgeInsets.symmetric(
                   horizontal: 4, vertical: 8),
               itemCount: msgs.length,
               itemBuilder: (_, i) {
@@ -552,53 +551,49 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     !msg.id.startsWith('local_');
 
                 final showDate = index == 0 ||
-                    !_isSameDay(msg.timestamp, msgs[index - 1].timestamp);
+                    !_isSameDay(
+                        msg.timestamp, msgs[index - 1].timestamp);
 
-                return Column(
-                  children: [
-                    if (showDate) _DateSeparator(date: msg.timestamp),
-                    _SwipeableMessage(
-                      key:     ValueKey(msg.id),
-                      isMine:  isMine,
-                      enabled: canSwipe,
-                      onSwipe: () => setState(() => _replyTo = msg),
-                      child: MessageBubble(
-                        message:         msg,
-                        isMine:          isMine,
-                        showSenderName:  isGroup && !isMine,
-                        isSelected:      _selected.contains(msg.id),
-                        isSelectionMode: _isSelectionMode,
-                        onTap:           () => _onTap(msg, myId),
-                        onLongPress:     () => _onLongPress(msg),
-                        onImageTap: _showFullScreenImage,
-                      ),
+                return Column(children: [
+                  if (showDate) _DateSeparator(date: msg.timestamp),
+                  _SwipeableMessage(
+                    key:     ValueKey(msg.id),
+                    isMine:  isMine,
+                    enabled: canSwipe,
+                    onSwipe: () => setState(() => _replyTo = msg),
+                    child: MessageBubble(
+                      message:         msg,
+                      isMine:          isMine,
+                      showSenderName:  isGroup && !isMine,
+                      isSelected:      _selected.contains(msg.id),
+                      isSelectionMode: _isSelectionMode,
+                      onTap:           () => _onTap(msg, myId),
+                      onLongPress:     () => _onLongPress(msg),
+                      onImageTap:      _showFullScreenImage,
                     ),
-                  ],
-                );
+                  ),
+                ]);
               },
             ),
           ),
 
-          // ✅ Edit Banner
+          // ── Edit banner ────────────────────────────────────────────────
           if (_editingMsg != null)
-            _EditBanner(
-              message:  _editingMsg!,
-              onCancel: _cancelEdit,
-            ),
+            _EditBanner(message: _editingMsg!, onCancel: _cancelEdit),
 
-          // ── Reply bar ──
-          if (_replyTo != null && _editingMsg == null)  // ← Edit va reply birgalikda bo'lmassin
+          // ── Reply bar ──────────────────────────────────────────────────
+          if (_replyTo != null && _editingMsg == null)
             _ReplyBar(
               message:  _replyTo!,
               onCancel: () => setState(() => _replyTo = null),
             ),
 
-          // ── Input ──
+          // ── Input ──────────────────────────────────────────────────────
           _InputBar(
             controller:        _textCtrl,
             focusNode:         _focusNode,
             isTyping:          _typing,
-            isEditing:         _editingMsg != null,  // ← EDIT FLAG
+            isEditing:         _editingMsg != null,
             isRecording:       _isRecording,
             recordingDuration: _recordingDuration,
             recordAnimation:   _recordAnim,
@@ -620,23 +615,24 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Online Status widget
+// Online Status — UTC+5
 // ═══════════════════════════════════════════════════════════════════════════════
 class _OnlineStatus extends StatelessWidget {
   final bool      isOnline;
   final DateTime? lastSeen;
-
   const _OnlineStatus({required this.isOnline, this.lastSeen});
 
   String _formatLastSeen(DateTime dt) {
-    final now  = DateTime.now().toUtc().add(const Duration(hours: 5));
-    final diff = now.difference(dt.toUtc().add(const Duration(hours: 5)));
+    final now  = DateTime.now().toUtc().add(const Duration(hours: 0));
+    final uzb  = dt.toUtc().add(const Duration(hours: 5));
+    final diff = now.difference(uzb);
     if (diff.inMinutes < 1)  return 'Hozirgina';
     if (diff.inMinutes < 60) return '${diff.inMinutes} daqiqa oldin';
     if (diff.inHours   < 24) return '${diff.inHours} soat oldin';
     if (diff.inDays    < 7)  return '${diff.inDays} kun oldin';
-    final uzb = dt.toUtc().add(const Duration(hours: 5));
-    return '${uzb.day.toString().padLeft(2,'0')}.${uzb.month.toString().padLeft(2,'0')}.${uzb.year}';
+    return '${uzb.day.toString().padLeft(2, '0')}.'
+        '${uzb.month.toString().padLeft(2, '0')}.'
+        '${uzb.year}';
   }
 
   @override
@@ -653,14 +649,11 @@ class _OnlineStatus extends StatelessWidget {
             style: TextStyle(color: AppTheme.online, fontSize: 11)),
       ]);
     }
-
     if (lastSeen != null) {
-      return Text(
-        _formatLastSeen(lastSeen!),
-        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-      );
+      return Text(_formatLastSeen(lastSeen!),
+          style: const TextStyle(
+              color: AppTheme.textSecondary, fontSize: 11));
     }
-
     return const Text('Oflayn',
         style: TextStyle(color: AppTheme.textSecondary, fontSize: 11));
   }
@@ -675,18 +668,18 @@ class _DateSeparator extends StatelessWidget {
 
   String _format() {
     final uzb = date.toUtc().add(const Duration(hours: 5));
-    final now       = DateTime.now().toUtc().add(const Duration(hours: 5));
+    final now = DateTime.now().toUtc().add(const Duration(hours: 0));
     final yesterday = now.subtract(const Duration(days: 1));
 
     if (_sameDay(uzb, now))       return 'Bugun';
     if (_sameDay(uzb, yesterday)) return 'Kecha';
     if (uzb.year == now.year) {
-      const m = ['','Yanvar','Fevral','Mart','Aprel','May','Iyun',
-        'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+      const m = ['', 'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+        'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
       return '${uzb.day} ${m[uzb.month]}';
     }
-    return '${uzb.day.toString().padLeft(2,'0')}.'
-        '${uzb.month.toString().padLeft(2,'0')}.'
+    return '${uzb.day.toString().padLeft(2, '0')}.'
+        '${uzb.month.toString().padLeft(2, '0')}.'
         '${uzb.year}';
   }
 
@@ -698,7 +691,8 @@ class _DateSeparator extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 10),
     child: Center(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        padding:
+        const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         decoration: BoxDecoration(
           color: AppTheme.surfaceLight,
           borderRadius: BorderRadius.circular(12),
@@ -706,7 +700,8 @@ class _DateSeparator extends StatelessWidget {
         child: Text(_format(),
             style: const TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 12, fontWeight: FontWeight.w500)),
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
       ),
     ),
   );
@@ -752,9 +747,8 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
     });
   }
 
-  void _onEnd(DragEndDetails _) => setState(() {
-    _drag = 0; _triggered = false;
-  });
+  void _onEnd(DragEndDetails _) =>
+      setState(() { _drag = 0; _triggered = false; });
 
   @override
   Widget build(BuildContext context) {
@@ -777,13 +771,16 @@ class _SwipeableMessageState extends State<_SwipeableMessage> {
                   color: AppTheme.primary.withAlpha(30),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.reply_rounded, color: AppTheme.primary, size: 18),
+                child: const Icon(Icons.reply_rounded,
+                    color: AppTheme.primary, size: 18),
               ),
             ),
           ),
         ),
         AnimatedContainer(
-          duration: _drag == 0 ? const Duration(milliseconds: 200) : Duration.zero,
+          duration: _drag == 0
+              ? const Duration(milliseconds: 200)
+              : Duration.zero,
           curve: Curves.easeOut,
           transform: Matrix4.translationValues(_drag, 0, 0),
           child: widget.child,
@@ -812,24 +809,35 @@ class _ReplyBar extends StatelessWidget {
         border: Border(top: BorderSide(color: AppTheme.surfaceLight)),
       ),
       child: Row(children: [
-        Container(width: 3, height: 42,
-            decoration: BoxDecoration(color: AppTheme.primary,
+        Container(
+            width: 3,
+            height: 42,
+            decoration: BoxDecoration(
+                color: AppTheme.primary,
                 borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 10),
-        Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(message.senderName,
-              style: const TextStyle(color: AppTheme.primary,
-                  fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text(
-            isImage ? '📷 Rasm' : isAudio ? '🎤 Audio' : message.content,
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-          ),
-        ])),
+        Expanded(
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(message.senderName,
+                    style: const TextStyle(
+                        color: AppTheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  isImage ? '📷 Rasm' : isAudio ? '🎤 Audio' : message.content,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
+                ),
+              ]),
+        ),
         IconButton(
-          icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 18),
+          icon: const Icon(Icons.close,
+              color: AppTheme.textSecondary, size: 18),
           onPressed: onCancel,
         ),
       ]),
@@ -844,15 +852,20 @@ class _EmptyChat extends StatelessWidget {
   const _EmptyChat();
   @override
   Widget build(BuildContext context) => const Center(
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.chat_bubble_outline_rounded, size: 56, color: AppTheme.textSecondary),
-      SizedBox(height: 12),
-      Text("Hali xabarlar yo'q",
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-      SizedBox(height: 6),
-      Text('Birinchi xabarni yuboring 👋',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-    ]),
+    child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chat_bubble_outline_rounded,
+              size: 56, color: AppTheme.textSecondary),
+          SizedBox(height: 12),
+          Text("Hali xabarlar yo'q",
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 14)),
+          SizedBox(height: 6),
+          Text('Birinchi xabarni yuboring 👋',
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 12)),
+        ]),
   );
 }
 
@@ -863,7 +876,7 @@ class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode             focusNode;
   final bool                  isTyping;
-  final bool                  isEditing;        // ← NEW FLAG
+  final bool                  isEditing;
   final bool                  isRecording;
   final Duration              recordingDuration;
   final AnimationController   recordAnimation;
@@ -922,27 +935,26 @@ class _InputBar extends StatelessWidget {
           rippleAnim: recordRippleAnim,
         )
             : _NormalBar(
-          key:           const ValueKey('normal'),
-          controller:    controller,
-          focusNode:     focusNode,
-          isTyping:      isTyping,
-          isEditing:     isEditing,  // ← PASS FLAG
-          inputFade:     inputFade,
-          onSend:        onSend,
-          onPickImage:   onPickImage,
-          onStartRec:    onStartRecording,
+          key:         const ValueKey('normal'),
+          controller:  controller,
+          focusNode:   focusNode,
+          isTyping:    isTyping,
+          isEditing:   isEditing,
+          inputFade:   inputFade,
+          onSend:      onSend,
+          onPickImage: onPickImage,
+          onStartRec:  onStartRecording,
         ),
       ),
     );
   }
 }
 
-// ── Normal input ──────────────────────────────────────────────────────────────
 class _NormalBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode             focusNode;
   final bool                  isTyping;
-  final bool                  isEditing;        // ← NEW
+  final bool                  isEditing;
   final Animation<double>     inputFade;
   final VoidCallback          onSend;
   final VoidCallback          onPickImage;
@@ -964,7 +976,6 @@ class _NormalBar extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
-      // ✅ EDIT MODE DA PHOTO BUTTON YASHIRILSIN
       if (!isEditing)
         Padding(
           padding: const EdgeInsets.only(bottom: 2),
@@ -979,10 +990,14 @@ class _NormalBar extends StatelessWidget {
             controller:      controller,
             maxLines:        null,
             textInputAction: TextInputAction.newline,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15),
+            style: const TextStyle(
+                color: AppTheme.textPrimary, fontSize: 15),
             decoration: InputDecoration(
-              hintText:  isEditing ? 'Xabarni tahrirlash...' : 'Xabar yozing...',
-              hintStyle: const TextStyle(color: AppTheme.textSecondary),
+              hintText: isEditing
+                  ? 'Xabarni tahrirlash...'
+                  : 'Xabar yozing...',
+              hintStyle:
+              const TextStyle(color: AppTheme.textSecondary),
               filled:    true,
               fillColor: AppTheme.surfaceLight,
               border: OutlineInputBorder(
@@ -1001,7 +1016,9 @@ class _NormalBar extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.only(bottom: 2),
         child: _CircleBtn(
-          icon:      isTyping || isEditing ? Icons.send_rounded : Icons.mic_rounded,
+          icon: isTyping || isEditing
+              ? Icons.send_rounded
+              : Icons.mic_rounded,
           isPrimary: true,
           onTap:     isTyping || isEditing ? onSend : onStartRec,
         ),
@@ -1010,7 +1027,6 @@ class _NormalBar extends StatelessWidget {
   );
 }
 
-// ── Recording bar ─────────────────────────────────────────────────────────────
 class _RecordingBar extends StatelessWidget {
   final Duration            duration;
   final VoidCallback        onStop;
@@ -1040,11 +1056,11 @@ class _RecordingBar extends StatelessWidget {
         width: 46, height: 46,
         decoration: BoxDecoration(
             color: Colors.red.withAlpha(200), shape: BoxShape.circle),
-        child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+        child: const Icon(Icons.close_rounded,
+            color: Colors.white, size: 22),
       ),
     ),
     const SizedBox(width: 10),
-
     Expanded(
       child: Container(
         height: 46,
@@ -1088,32 +1104,37 @@ class _RecordingBar extends StatelessWidget {
           Text(_fmt(duration),
               style: const TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 15, fontWeight: FontWeight.w600)),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600)),
           const Spacer(),
           const Text('Bekor uchun chapga suring',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 11)),
         ]),
       ),
     ),
     const SizedBox(width: 10),
-
     GestureDetector(
       onTap: onStop,
       child: Container(
         width: 46, height: 46,
         decoration: BoxDecoration(
-          color: AppTheme.primary, shape: BoxShape.circle,
-          boxShadow: [BoxShadow(
-              color:      AppTheme.primary.withAlpha(80),
-              blurRadius: 12, offset: const Offset(0, 4))],
+          color: AppTheme.primary,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+                color:      AppTheme.primary.withAlpha(80),
+                blurRadius: 12,
+                offset:     const Offset(0, 4))
+          ],
         ),
-        child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+        child: const Icon(Icons.check_rounded,
+            color: Colors.white, size: 22),
       ),
     ),
   ]);
 }
 
-// ── Circle button ─────────────────────────────────────────────────────────────
 class _CircleBtn extends StatelessWidget {
   final IconData     icon;
   final bool         isPrimary;
@@ -1136,9 +1157,12 @@ class _CircleBtn extends StatelessWidget {
         color: isPrimary ? AppTheme.primary : AppTheme.surfaceLight,
         shape: BoxShape.circle,
         boxShadow: isPrimary
-            ? [BoxShadow(
-            color:      AppTheme.primary.withAlpha(80),
-            blurRadius: 12, offset: const Offset(0, 4))]
+            ? [
+          BoxShadow(
+              color:      AppTheme.primary.withAlpha(80),
+              blurRadius: 12,
+              offset:     const Offset(0, 4))
+        ]
             : null,
       ),
       child: Icon(icon,
@@ -1148,7 +1172,6 @@ class _CircleBtn extends StatelessWidget {
   );
 }
 
-// ── Edit Banner ───────────────────────────────────────────────────────────────
 class _EditBanner extends StatelessWidget {
   final Message      message;
   final VoidCallback onCancel;
@@ -1168,25 +1191,26 @@ class _EditBanner extends StatelessWidget {
           color: AppTheme.primary.withOpacity(0.15),
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.edit_rounded, color: AppTheme.primary, size: 18),
+        child: const Icon(Icons.edit_rounded,
+            color: AppTheme.primary, size: 18),
       ),
       const SizedBox(width: 10),
       Expanded(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Xabarni tahrirlash',
-                style: TextStyle(
-                    color: AppTheme.primary,
-                    fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 1),
-            Text(message.content,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 12)),
-          ],
-        ),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Xabarni tahrirlash',
+                  style: TextStyle(
+                      color: AppTheme.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 1),
+              Text(message.content,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12)),
+            ]),
       ),
       IconButton(
         icon: const Icon(Icons.close_rounded,

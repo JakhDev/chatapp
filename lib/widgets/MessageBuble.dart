@@ -6,7 +6,7 @@ import 'package:chatapp/theme/AppTheme.dart';
 
 // ── Helper: timestamp → '14:38' (O'zbekiston vaqti UTC+5) ─────────────────────
 String _fmtTime(DateTime dt) {
-  final uzb = dt.toUtc().add(const Duration(hours: 5));
+  final uzb = dt.toUtc().add(const Duration(hours: 0));
   final h = uzb.hour.toString().padLeft(2, '0');
   final m = uzb.minute.toString().padLeft(2, '0');
   return '$h:$m';
