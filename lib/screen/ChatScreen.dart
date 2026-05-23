@@ -1284,19 +1284,19 @@ class _RecordingBar extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text(
                 _fmt(duration),
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
               const Text(
                 'Recording...',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               ),
             ],
           ),

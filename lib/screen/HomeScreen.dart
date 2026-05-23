@@ -42,11 +42,11 @@ class _HomeScreenState extends State<HomeScreen>
     );
     _searchSlide = Tween<Offset>(begin: const Offset(0, -0.4), end: Offset.zero)
         .animate(
-          CurvedAnimation(
-            parent: _searchAnimController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
+      CurvedAnimation(
+        parent: _searchAnimController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   @override
@@ -131,64 +131,64 @@ class _HomeScreenState extends State<HomeScreen>
                 curve: Curves.easeOutCubic,
                 child: _searchVisible
                     ? SlideTransition(
-                        position: _searchSlide,
-                        child: FadeTransition(
-                          opacity: _searchFade,
-                          child: Container(
-                            color: bgColor,
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: TextField(
-                              controller: _searchController,
-                              autofocus: true,
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                              ),
-                              onChanged: (v) {
-                                context.read<ChatProvider>().setSearchQuery(v);
-                                setState(() {});
-                              },
-                              decoration: InputDecoration(
-                                hintText: _selectedIndex == 0
-                                    ? 'Chatlarni qidirish...'
-                                    : 'Kontaktlarni qidirish...',
-                                hintStyle: const TextStyle(
-                                  color: AppTheme.textSecondary,
-                                ),
-                                prefixIcon: const Icon(
-                                  Icons.search_rounded,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                suffixIcon: _searchController.text.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(
-                                          Icons.close,
-                                          color: AppTheme.textSecondary,
-                                          size: 18,
-                                        ),
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          context
-                                              .read<ChatProvider>()
-                                              .setSearchQuery('');
-                                          setState(() {});
-                                        },
-                                      )
-                                    : null,
-                                filled: true,
-                                fillColor: AppTheme.surfaceLight,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                              ),
+                  position: _searchSlide,
+                  child: FadeTransition(
+                    opacity: _searchFade,
+                    child: Container(
+                      color: bgColor,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                        ),
+                        onChanged: (v) {
+                          context.read<ChatProvider>().setSearchQuery(v);
+                          setState(() {});
+                        },
+                        decoration: InputDecoration(
+                          hintText: _selectedIndex == 0
+                              ? 'Chatlarni qidirish...'
+                              : 'Kontaktlarni qidirish...',
+                          hintStyle: const TextStyle(
+                            color: AppTheme.textSecondary,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: AppTheme.textSecondary,
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: AppTheme.textSecondary,
+                              size: 18,
                             ),
+                            onPressed: () {
+                              _searchController.clear();
+                              context
+                                  .read<ChatProvider>()
+                                  .setSearchQuery('');
+                              setState(() {});
+                            },
+                          )
+                              : null,
+                          filled: true,
+                          fillColor: AppTheme.surfaceLight,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
                         ),
-                      )
+                      ),
+                    ),
+                  ),
+                )
                     : const SizedBox.shrink(),
               ),
 
@@ -236,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen>
         },
         unreadCount: context.watch<ChatProvider>().chats.fold(
           0,
-          (sum, c) => sum + c.unreadCount,
+              (sum, c) => sum + c.unreadCount,
         ),
       ),
     );
@@ -845,9 +845,9 @@ class _ContactsScreenState extends State<_ContactsScreen> {
             ),
             subtitle: isOnline
                 ? const Text(
-                    'Onlayn',
-                    style: TextStyle(color: AppTheme.online, fontSize: 11),
-                  )
+              'Onlayn',
+              style: TextStyle(color: AppTheme.online, fontSize: 11),
+            )
                 : null,
             onTap: () async {
               final chat = await ctx.read<ChatProvider>().fetchOrCreateChat(u);
@@ -1141,13 +1141,13 @@ class _ProfileScreen extends StatelessWidget {
               ),
               child: avatar != null && avatar.isNotEmpty
                   ? ClipOval(
-                      child: Image.network(
-                        avatar,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _defaultAvatar(user?.name ?? ''),
-                      ),
-                    )
+                child: Image.network(
+                  avatar,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _defaultAvatar(user?.name ?? ''),
+                ),
+              )
                   : _defaultAvatar(user?.name ?? ''),
             ),
           ),
@@ -1259,7 +1259,7 @@ class _ProfileScreen extends StatelessWidget {
                   Navigator.pushNamedAndRemoveUntil(
                     context,
                     '/login',
-                    (r) => false,
+                        (r) => false,
                   );
                 }
               }
