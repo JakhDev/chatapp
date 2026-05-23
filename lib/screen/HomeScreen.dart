@@ -38,13 +38,13 @@ class _HomeScreenState extends State<HomeScreen>
       parent: _searchAnimController,
       curve: Curves.easeOut,
     );
-    _searchSlide = Tween<Offset>(
-      begin: const Offset(0, -0.4),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _searchAnimController,
-      curve: Curves.easeOutCubic,
-    ));
+    _searchSlide = Tween<Offset>(begin: const Offset(0, -0.4), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _searchAnimController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
   }
 
   @override
@@ -69,11 +69,16 @@ class _HomeScreenState extends State<HomeScreen>
 
   String get _appBarTitle {
     switch (_selectedIndex) {
-      case 0:  return 'Chatlar';
-      case 1:  return 'Kontaktlar';
-      case 2:  return 'Sozlamalar';
-      case 3:  return 'Profil';
-      default: return '';
+      case 0:
+        return 'Chatlar';
+      case 1:
+        return 'Kontaktlar';
+      case 2:
+        return 'Sozlamalar';
+      case 3:
+        return 'Profil';
+      default:
+        return '';
     }
   }
 
@@ -127,51 +132,64 @@ class _HomeScreenState extends State<HomeScreen>
                 curve: Curves.easeOutCubic,
                 child: _searchVisible
                     ? SlideTransition(
-                  position: _searchSlide,
-                  child: FadeTransition(
-                    opacity: _searchFade,
-                    child: Container(
-                      color: bgColor,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        onChanged: (v) {
-                          context.read<ChatProvider>().setSearchQuery(v);
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          hintText: _selectedIndex == 0
-                              ? 'Chatlarni qidirish...'
-                              : 'Kontaktlarni qidirish...',
-                          hintStyle: const TextStyle(color: AppTheme.textSecondary),
-                          prefixIcon: const Icon(Icons.search_rounded,
-                              color: AppTheme.textSecondary),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                            icon: const Icon(Icons.close,
-                                color: AppTheme.textSecondary, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              context.read<ChatProvider>().setSearchQuery('');
-                              setState(() {});
-                            },
-                          )
-                              : null,
-                          filled: true,
-                          fillColor: AppTheme.surfaceLight,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
+                        position: _searchSlide,
+                        child: FadeTransition(
+                          opacity: _searchFade,
+                          child: Container(
+                            color: bgColor,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: TextField(
+                              controller: _searchController,
+                              autofocus: true,
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                              ),
+                              onChanged: (v) {
+                                context.read<ChatProvider>().setSearchQuery(v);
+                                setState(() {});
+                              },
+                              decoration: InputDecoration(
+                                hintText: _selectedIndex == 0
+                                    ? 'Chatlarni qidirish...'
+                                    : 'Kontaktlarni qidirish...',
+                                hintStyle: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                suffixIcon: _searchController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: AppTheme.textSecondary,
+                                          size: 18,
+                                        ),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          context
+                                              .read<ChatProvider>()
+                                              .setSearchQuery('');
+                                          setState(() {});
+                                        },
+                                      )
+                                    : null,
+                                filled: true,
+                                fillColor: AppTheme.surfaceLight,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
                         ),
-                      ),
-                    ),
-                  ),
-                )
+                      )
                     : const SizedBox.shrink(),
               ),
 
@@ -217,21 +235,26 @@ class _HomeScreenState extends State<HomeScreen>
           }
           setState(() => _selectedIndex = index);
         },
-        unreadCount: context
-            .watch<ChatProvider>()
-            .chats
-            .fold(0, (sum, c) => sum + c.unreadCount),
+        unreadCount: context.watch<ChatProvider>().chats.fold(
+          0,
+          (sum, c) => sum + c.unreadCount,
+        ),
       ),
     );
   }
 
   Widget _buildScreen() {
     switch (_selectedIndex) {
-      case 0:  return const _ChatsScreen();
-      case 1:  return const _ContactsScreen();
-      case 2:  return const _SettingsScreen();
-      case 3:  return const _ProfileScreen();
-      default: return const SizedBox();
+      case 0:
+        return const _ChatsScreen();
+      case 1:
+        return const _ContactsScreen();
+      case 2:
+        return const _SettingsScreen();
+      case 3:
+        return const _ProfileScreen();
+      default:
+        return const SizedBox();
     }
   }
 }
@@ -253,9 +276,9 @@ class _AnimatedBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavItem(icon: Icons.chat_bubble_rounded,    label: 'Chatlar'),
-      _NavItem(icon: Icons.people_alt_rounded,     label: 'Kontaktlar'),
-      _NavItem(icon: Icons.settings_rounded,       label: 'Sozlamalar'),
+      _NavItem(icon: Icons.chat_bubble_rounded, label: 'Chatlar'),
+      _NavItem(icon: Icons.people_alt_rounded, label: 'Kontaktlar'),
+      _NavItem(icon: Icons.settings_rounded, label: 'Sozlamalar'),
       _NavItem(icon: Icons.account_circle_rounded, label: 'Profil'),
     ];
 
@@ -283,7 +306,9 @@ class _AnimatedBottomNav extends StatelessWidget {
                         duration: const Duration(milliseconds: 250),
                         curve: Curves.easeOutCubic,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 6),
+                          horizontal: 18,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: selected
                               ? AppTheme.primary.withOpacity(0.15)
@@ -306,7 +331,9 @@ class _AnimatedBottomNav extends StatelessWidget {
                                 right: -12,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 2),
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppTheme.primary,
                                     borderRadius: BorderRadius.circular(10),
@@ -332,8 +359,9 @@ class _AnimatedBottomNav extends StatelessWidget {
                               ? AppTheme.primary
                               : AppTheme.textSecondary,
                           fontSize: 11,
-                          fontWeight:
-                          selected ? FontWeight.w700 : FontWeight.normal,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.normal,
                         ),
                         child: Text(items[i].label),
                       ),
@@ -352,6 +380,7 @@ class _AnimatedBottomNav extends StatelessWidget {
 class _NavItem {
   final IconData icon;
   final String label;
+
   const _NavItem({required this.icon, required this.label});
 }
 
@@ -367,42 +396,62 @@ class _ChatsScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 22),
-          SizedBox(width: 8),
-          Text("Chatni o'chirish",
-              style: TextStyle(color: AppTheme.textPrimary, fontSize: 17)),
-        ]),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.redAccent,
+              size: 22,
+            ),
+            SizedBox(width: 8),
+            Text(
+              "Chatni o'chirish",
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 17),
+            ),
+          ],
+        ),
         content: RichText(
           text: TextSpan(
             style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 14, height: 1.5),
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+              height: 1.5,
+            ),
             children: [
               const TextSpan(text: '"'),
               TextSpan(
                 text: chat.name,
                 style: const TextStyle(
-                    color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const TextSpan(
-                  text: '" bilan bo\'lgan chat va barcha xabarlar o\'chiriladi.'),
+                text: '" bilan bo\'lgan chat va barcha xabarlar o\'chiriladi.',
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Bekor qilish',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              'Bekor qilish',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await context.read<ChatProvider>().deleteChat(chat.id);
             },
-            child: const Text("O'chirish",
-                style: TextStyle(
-                    color: Colors.redAccent, fontWeight: FontWeight.w700)),
+            child: const Text(
+              "O'chirish",
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -412,12 +461,12 @@ class _ChatsScreen extends StatelessWidget {
   // UTC+5 vaqti
   String _fmt(DateTime? dt) {
     if (dt == null) return '';
-    final t   = dt.toUtc().add(const Duration(hours: 5));
+    final t = dt.toUtc().add(const Duration(hours: 5));
     final now = DateTime.now().toUtc().add(const Duration(hours: 5));
-    final d   = now.difference(t);
+    final d = now.difference(t);
     if (d.inMinutes < 1) return 'Hozir';
     final today = DateTime(now.year, now.month, now.day);
-    final tDate = DateTime(t.year,   t.month,   t.day);
+    final tDate = DateTime(t.year, t.month, t.day);
     if (tDate == today)
       return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
     if (tDate == today.subtract(const Duration(days: 1))) return 'Kecha';
@@ -427,8 +476,7 @@ class _ChatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
-    final chats = provider
-        .chats
+    final chats = provider.chats
         .where((c) => c.lastMessage != null || c.lastMessageTime != null)
         .toList();
 
@@ -442,15 +490,22 @@ class _ChatsScreen extends StatelessWidget {
               duration: const Duration(milliseconds: 600),
               curve: Curves.elasticOut,
               builder: (_, v, child) => Transform.scale(scale: v, child: child),
-              child: const Icon(Icons.chat_bubble_outline,
-                  size: 64, color: AppTheme.textSecondary),
+              child: const Icon(
+                Icons.chat_bubble_outline,
+                size: 64,
+                color: AppTheme.textSecondary,
+              ),
             ),
             const SizedBox(height: 14),
-            const Text("Hali chatlar yo'q",
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+            const Text(
+              "Hali chatlar yo'q",
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+            ),
             const SizedBox(height: 6),
-            const Text('Contacts dan foydalanuvchi tanlang',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const Text(
+              'Contacts dan foydalanuvchi tanlang',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
           ],
         ),
       );
@@ -460,15 +515,15 @@ class _ChatsScreen extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4, bottom: 20),
       itemCount: chats.length,
       itemBuilder: (_, i) {
-        final chat      = chats[i];
+        final chat = chats[i];
         final hasUnread = chat.unreadCount > 0;
 
         // ✅ Real-time online status
-        final isGroup   = chat.type == ChatType.group;
-        final ids       = chat.id.split('_');
-        final myId      = provider.currentUser?.id ?? '';
-        final otherId   = ids.firstWhere((id) => id != myId, orElse: () => '');
-        final isOnline  = provider.isUserOnline(otherId);
+        final isGroup = chat.type == ChatType.group;
+        final ids = chat.id.split('_');
+        final myId = provider.currentUser?.id ?? '';
+        final otherId = ids.firstWhere((id) => id != myId, orElse: () => '');
+        final isOnline = provider.isUserOnline(otherId);
 
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
@@ -477,104 +532,132 @@ class _ChatsScreen extends StatelessWidget {
           builder: (_, v, child) => Opacity(
             opacity: v,
             child: Transform.translate(
-                offset: Offset(0, 20 * (1 - v)), child: child),
+              offset: Offset(0, 20 * (1 - v)),
+              child: child,
+            ),
           ),
           child: InkWell(
             onTap: () {
               context.read<ChatProvider>().openChat(chat.id);
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)))
-                  .then((_) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)),
+              ).then((_) {
                 if (context.mounted) context.read<ChatProvider>().closeChat();
               });
             },
             onLongPress: () => _showDeleteDialog(context, chat),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-              child: Row(children: [
-                Stack(children: [
-                  AvatarWidget(
-                      name: chat.name,
-                      size: 52,
-                      isGroup: isGroup,
-                      isOnline: !isGroup && isOnline),  // ✅ Real-time
-                  if (!isGroup && isOnline)
-                    Positioned(
-                      bottom: 2,
-                      right: 2,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: AppTheme.online,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: AppTheme.background, width: 2),
-                        ),
-                      ),
-                    ),
-                ]),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                children: [
+                  Stack(
                     children: [
-                      Row(children: [
-                        Expanded(
-                          child: Text(chat.name,
-                              style: const TextStyle(
+                      AvatarWidget(
+                        name: chat.name,
+                        size: 52,
+                        isGroup: isGroup,
+                        isOnline: !isGroup && isOnline,
+                      ), // ✅ Real-time
+                      if (!isGroup && isOnline)
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: AppTheme.online,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppTheme.background,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chat.name,
+                                style: const TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 15),
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                        Text(_fmt(chat.lastMessageTime),
-                            style: TextStyle(
+                                  fontSize: 15,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              _fmt(chat.lastMessageTime),
+                              style: TextStyle(
                                 fontSize: 11,
                                 color: hasUnread
                                     ? AppTheme.online
                                     : AppTheme.textSecondary,
                                 fontWeight: hasUnread
                                     ? FontWeight.w600
-                                    : FontWeight.normal)),
-                      ]),
-                      const SizedBox(height: 4),
-                      Row(children: [
-                        Expanded(
-                          child: Text(chat.lastMessage ?? "Xabar yo'q",
-                              style: TextStyle(
-                                color: hasUnread
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.textSecondary,
-                                fontSize: 13,
-                                fontWeight: hasUnread
-                                    ? FontWeight.w600
                                     : FontWeight.normal,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1),
+                            ),
+                          ],
                         ),
-                        if (hasUnread)
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                                color: AppTheme.online,
-                                shape: BoxShape.circle),
-                            constraints: const BoxConstraints(
-                                minWidth: 20, minHeight: 20),
-                            child: Center(
-                              child: Text('${chat.unreadCount}',
-                                  style: const TextStyle(
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chat.lastMessage ?? "Xabar yo'q",
+                                style: TextStyle(
+                                  color: hasUnread
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: hasUnread
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            if (hasUnread)
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.online,
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 20,
+                                  minHeight: 20,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${chat.unreadCount}',
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 10,
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                      ]),
-                    ],
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
             ),
           ),
         );
@@ -608,43 +691,62 @@ class _ContactsScreenState extends State<_ContactsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.delete_outline_rounded,
-              color: Colors.redAccent, size: 22),
-          SizedBox(width: 8),
-          Text("O'chirish",
-              style: TextStyle(color: AppTheme.textPrimary, fontSize: 17)),
-        ]),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.redAccent,
+              size: 22,
+            ),
+            SizedBox(width: 8),
+            Text(
+              "O'chirish",
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 17),
+            ),
+          ],
+        ),
         content: RichText(
           text: TextSpan(
             style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 14, height: 1.5),
+              color: AppTheme.textSecondary,
+              fontSize: 14,
+              height: 1.5,
+            ),
             children: [
               const TextSpan(text: '"'),
               TextSpan(
                 text: user.name,
                 style: const TextStyle(
-                    color: AppTheme.textPrimary, fontWeight: FontWeight.w700),
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const TextSpan(
-                  text: '" foydalanuvchini ro\'yxatdan o\'chirasizmi?'),
+                text: '" foydalanuvchini ro\'yxatdan o\'chirasizmi?',
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Bekor qilish",
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text(
+              "Bekor qilish",
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await context.read<ChatProvider>().deleteUser(user.id);
             },
-            child: const Text("O'chirish",
-                style: TextStyle(
-                    color: Colors.redAccent, fontWeight: FontWeight.w700)),
+            child: const Text(
+              "O'chirish",
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -654,10 +756,8 @@ class _ContactsScreenState extends State<_ContactsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ChatProvider>();
-    final myId     = sb.Supabase.instance.client.auth.currentUser?.id ?? '';
-    final users    = provider.allUsers
-        .where((u) => u.id != myId)
-        .toList();
+    final myId = sb.Supabase.instance.client.auth.currentUser?.id ?? '';
+    final users = provider.allUsers.where((u) => u.id != myId).toList();
 
     if (users.isEmpty) {
       return Center(
@@ -669,12 +769,17 @@ class _ContactsScreenState extends State<_ContactsScreen> {
               duration: const Duration(milliseconds: 600),
               curve: Curves.elasticOut,
               builder: (_, v, child) => Transform.scale(scale: v, child: child),
-              child: const Icon(Icons.people_outline,
-                  size: 64, color: AppTheme.textSecondary),
+              child: const Icon(
+                Icons.people_outline,
+                size: 64,
+                color: AppTheme.textSecondary,
+              ),
             ),
             const SizedBox(height: 14),
-            const Text("Foydalanuvchilar yo'q",
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+            const Text(
+              "Foydalanuvchilar yo'q",
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+            ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () => context.read<ChatProvider>().loadAllUsers(),
@@ -701,14 +806,18 @@ class _ContactsScreenState extends State<_ContactsScreen> {
           builder: (_, v, child) => Opacity(
             opacity: v,
             child: Transform.translate(
-                offset: Offset(0, 16 * (1 - v)), child: child),
+              offset: Offset(0, 16 * (1 - v)),
+              child: child,
+            ),
           ),
           child: ListTile(
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 4,
+            ),
             leading: Stack(
               children: [
-                AvatarWidget(name: u.name, size: 44, isOnline: isOnline),  // ✅
+                AvatarWidget(name: u.name, size: 44, isOnline: isOnline), // ✅
                 if (isOnline)
                   Positioned(
                     bottom: 0,
@@ -719,23 +828,30 @@ class _ContactsScreenState extends State<_ContactsScreen> {
                       decoration: BoxDecoration(
                         color: AppTheme.online,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.background, width: 2),
+                        border: Border.all(
+                          color: AppTheme.background,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
-            title: Text(u.name,
-                style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600)),
+            title: Text(
+              u.name,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             subtitle: isOnline
-                ? const Text('Onlayn',
-                style: TextStyle(color: AppTheme.online, fontSize: 11))
+                ? const Text(
+                    'Onlayn',
+                    style: TextStyle(color: AppTheme.online, fontSize: 11),
+                  )
                 : null,
             onTap: () async {
-              final chat =
-              await ctx.read<ChatProvider>().fetchOrCreateChat(u);
+              final chat = await ctx.read<ChatProvider>().fetchOrCreateChat(u);
               if (!ctx.mounted) return;
               ctx.read<ChatProvider>().openChat(chat.id);
               Navigator.push(
@@ -766,66 +882,96 @@ class _SettingsScreen extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text('HISOB',
-              style: TextStyle(
-                  color: AppTheme.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5)),
+          child: Text(
+            'HISOB',
+            style: TextStyle(
+              color: AppTheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
         ),
         ListTile(
           leading: const Icon(Icons.lock_rounded, color: AppTheme.primary),
-          title: const Text('Ikki bosqichli tekshiruv',
-              style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
-          subtitle: const Text("O'chiq",
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          title: const Text(
+            'Ikki bosqichli tekshiruv',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: const Text(
+            "O'chiq",
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
           onTap: () {},
         ),
         ListTile(
           leading: const Icon(Icons.language, color: AppTheme.primary),
-          title: const Text('Tillar',
-              style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
-          subtitle: const Text('Uzbek',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          title: const Text(
+            'Tillar',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: const Text(
+            'Uzbek',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
           onTap: () {},
         ),
         const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text('Bildirishnomalar',
-              style: TextStyle(
-                  color: AppTheme.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5)),
+          child: Text(
+            'Bildirishnomalar',
+            style: TextStyle(
+              color: AppTheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
         ),
         ListTile(
-          leading: const Icon(Icons.notifications_rounded,
-              color: AppTheme.primary),
-          title: const Text('Ilova bildirishnomalari',
-              style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+          leading: const Icon(
+            Icons.notifications_rounded,
+            color: AppTheme.primary,
+          ),
+          title: const Text(
+            'Ilova bildirishnomalari',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           trailing: Switch(
-              value: false, onChanged: (v) {}, activeColor: AppTheme.primary),
+            value: false,
+            onChanged: (v) {},
+            activeColor: AppTheme.primary,
+          ),
           onTap: () {},
         ),
         ListTile(
           leading: const Icon(Icons.dark_mode, color: AppTheme.primary),
-          title: const Text("Qorong'u rejim",
-              style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+          title: const Text(
+            "Qorong'u rejim",
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           trailing: Switch(
-              value: true, onChanged: (v) {}, activeColor: AppTheme.primary),
+            value: true,
+            onChanged: (v) {},
+            activeColor: AppTheme.primary,
+          ),
           onTap: () {},
         ),
       ],
@@ -841,9 +987,9 @@ class _ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user   = context.watch<ChatProvider>().currentUser;
+    final user = context.watch<ChatProvider>().currentUser;
     final sbUser = sb.Supabase.instance.client.auth.currentUser;
-    final email  = sbUser?.email ?? '';
+    final email = sbUser?.email ?? '';
     final avatar = sbUser?.userMetadata?['avatar_url'] as String?;
 
     return ListView(
@@ -865,21 +1011,27 @@ class _ProfileScreen extends StatelessWidget {
               ),
               child: avatar != null && avatar.isNotEmpty
                   ? ClipOval(
-                  child: Image.network(avatar,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _defaultAvatar(user?.name ?? '')))
+                      child: Image.network(
+                        avatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _defaultAvatar(user?.name ?? ''),
+                      ),
+                    )
                   : _defaultAvatar(user?.name ?? ''),
             ),
           ),
         ),
         const SizedBox(height: 16),
         Center(
-          child: Text(user?.name ?? 'User',
-              style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700)),
+          child: Text(
+            user?.name ?? 'User',
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
         const SizedBox(height: 4),
         Center(
@@ -894,8 +1046,10 @@ class _ProfileScreen extends StatelessWidget {
               children: [
                 Icon(Icons.circle, color: Colors.greenAccent, size: 8),
                 SizedBox(width: 5),
-                Text('Onlayn',
-                    style: TextStyle(color: AppTheme.online, fontSize: 12)),
+                Text(
+                  'Onlayn',
+                  style: TextStyle(color: AppTheme.online, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -913,18 +1067,19 @@ class _ProfileScreen extends StatelessWidget {
               children: [
                 if (email.isNotEmpty) ...[
                   _infoTile(
-                      icon: Icons.email_outlined,
-                      label: 'Email',
-                      value: email,
-                      color: AppTheme.primary),
+                    icon: Icons.email_outlined,
+                    label: 'Email',
+                    value: email,
+                    color: AppTheme.primary,
+                  ),
                   const SizedBox(height: 12),
                 ],
                 _infoTile(
-                    icon: Icons.fingerprint_rounded,
-                    label: 'ID',
-                    value:
-                    sbUser?.id.substring(0, 8).toUpperCase() ?? '—',
-                    color: AppTheme.primary),
+                  icon: Icons.fingerprint_rounded,
+                  label: 'ID',
+                  value: sbUser?.id.substring(0, 8).toUpperCase() ?? '—',
+                  color: AppTheme.primary,
+                ),
               ],
             ),
           ),
@@ -936,7 +1091,8 @@ class _ProfileScreen extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.redAccent),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(16),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
             onPressed: () async {
@@ -944,18 +1100,26 @@ class _ProfileScreen extends StatelessWidget {
                 context: context,
                 builder: (ctx) => AlertDialog(
                   backgroundColor: AppTheme.surface,
-                  title: const Text('Chiqish',
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                  content: const Text('Dasturdan chiqmoqchimisiz?',
-                      style: TextStyle(color: AppTheme.textSecondary)),
+                  title: const Text(
+                    'Chiqish',
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
+                  content: const Text(
+                    'Dasturdan chiqmoqchimisiz?',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text("Yo'q")),
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text("Yo'q"),
+                    ),
                     TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Ha',
-                            style: TextStyle(color: Colors.redAccent))),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text(
+                        'Ha',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -963,15 +1127,21 @@ class _ProfileScreen extends StatelessWidget {
                 await context.read<ChatProvider>().logout();
                 if (context.mounted) {
                   Navigator.pushNamedAndRemoveUntil(
-                      context, '/login', (r) => false);
+                    context,
+                    '/login',
+                    (r) => false,
+                  );
                 }
               }
             },
-            child: const Text('Chiqish',
-                style: TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Chiqish',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ),
       ],
@@ -984,51 +1154,62 @@ class _ProfileScreen extends StatelessWidget {
       child: Text(
         name.isNotEmpty ? name[0].toUpperCase() : '?',
         style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold),
+          color: Colors.white,
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     ),
   );
 
   Widget _infoTile({
     required IconData icon,
-    required String   label,
-    required String   value,
-    required Color    color,
+    required String label,
+    required String value,
+    required Color color,
   }) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     decoration: BoxDecoration(
       color: AppTheme.surfaceLight,
       borderRadius: BorderRadius.circular(14),
     ),
-    child: Row(children: [
-      Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withAlpha(38),
-          borderRadius: BorderRadius.circular(10),
+    child: Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withAlpha(38),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 18),
         ),
-        child: Icon(icon, color: color, size: 18),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 11)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(value,
-                  style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis),
-            ]),
-      ),
-    ]),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
   );
 }

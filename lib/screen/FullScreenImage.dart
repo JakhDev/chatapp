@@ -3,6 +3,7 @@ import 'package:photo_view/photo_view.dart';
 
 class FullScreenImage extends StatelessWidget {
   final String imageUrl;
+
   const FullScreenImage({super.key, required this.imageUrl});
 
   @override

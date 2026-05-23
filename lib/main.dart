@@ -12,14 +12,17 @@ import 'package:chatapp/screen/SplashScreen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
 
   await Supabase.initialize(
-    url:     'https://lrkweduvjgmqerygvoaw.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxya3dlZHV2amdtcWVyeWd2b2F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNjUzMDgsImV4cCI6MjA5NDc0MTMwOH0.5nxPSEDvZJzFSl86lPVLxhoeXYtKQ50HRsmBzCb5H00',
+    url: 'https://lrkweduvjgmqerygvoaw.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxya3dlZHV2amdtcWVyeWd2b2F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNjUzMDgsImV4cCI6MjA5NDc0MTMwOH0.5nxPSEDvZJzFSl86lPVLxhoeXYtKQ50HRsmBzCb5H00',
   );
 
   runApp(const ChatApp());
@@ -35,19 +38,19 @@ class ChatApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => WebSocketService()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<WebSocketService, ChatProvider>(
-          create:  (ctx) => ChatProvider(ctx.read<WebSocketService>()),
-          update:  (_, ws, prev) => prev ?? ChatProvider(ws),
+          create: (ctx) => ChatProvider(ctx.read<WebSocketService>()),
+          update: (_, ws, prev) => prev ?? ChatProvider(ws),
         ),
       ],
       child: MaterialApp(
-        title:                     'FluxChat',
+        title: 'FluxChat',
         debugShowCheckedModeBanner: false,
-        theme:                     AppTheme.darkTheme,
-        initialRoute:              '/',
+        theme: AppTheme.darkTheme,
+        initialRoute: '/',
         routes: {
-          '/':      (_) => const _AppEntry(),
+          '/': (_) => const _AppEntry(),
           '/login': (_) => const SplashScreen(),
-          '/home':  (_) => const HomeScreen(),
+          '/home': (_) => const HomeScreen(),
         },
       ),
     );
@@ -68,10 +71,12 @@ class _AppEntryState extends State<_AppEntry> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final session = Supabase.instance.client.auth.currentSession;
       if (session != null && mounted) {
-        final u    = session.user;
-        final name = u.userMetadata?['full_name'] as String? ??
+        final u = session.user;
+        final name =
+            u.userMetadata?['full_name'] as String? ??
             u.userMetadata?['name'] as String? ??
-            u.email ?? 'Foydalanuvchi';
+            u.email ??
+            'Foydalanuvchi';
         context.read<ChatProvider>().login(name);
       }
     });

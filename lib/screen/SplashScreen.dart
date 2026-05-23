@@ -22,13 +22,16 @@ class _SplashScreenState extends State<SplashScreen>
     duration: const Duration(milliseconds: 1100),
   )..forward();
 
-  late final Animation<double> _fade =
-  CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-  late final Animation<Offset> _slide =
-  Tween(begin: const Offset(0, .3), end: Offset.zero)
-      .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOut,
+  );
+  late final Animation<Offset> _slide = Tween(
+    begin: const Offset(0, .3),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
 
-  bool _showLogin   = false;
+  bool _showLogin = false;
   bool _isNavigating = false;
   StreamSubscription<AuthState>? _authSub;
 
@@ -57,7 +60,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _authSub?.cancel(); // Xatoliklarni oldini olish uchun birinchi bo'lib lofni yopamiz
+    _authSub
+        ?.cancel(); // Xatoliklarni oldini olish uchun birinchi bo'lib lofni yopamiz
     _ctrl.dispose();
     super.dispose();
   }
@@ -72,7 +76,10 @@ class _SplashScreenState extends State<SplashScreen>
         _goHome();
       } else if (authProvider.error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authProvider.error!), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(authProvider.error!),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
@@ -93,8 +100,9 @@ class _SplashScreenState extends State<SplashScreen>
     // 2. Supabase'dan user ma'lumotlarini xavfsiz olamiz
     final sbUser = Supabase.instance.client.auth.currentUser;
     if (sbUser != null) {
-      final name = sbUser.userMetadata?['full_name'] as String? ??
-          sbUser.userMetadata?['name']  as String? ??
+      final name =
+          sbUser.userMetadata?['full_name'] as String? ??
+          sbUser.userMetadata?['name'] as String? ??
           sbUser.email ??
           'Foydalanuvchi';
 
@@ -131,21 +139,29 @@ class _SplashScreenState extends State<SplashScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 88, height: 88,
+                      width: 88,
+                      height: 88,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                            colors: [AppTheme.primary, AppTheme.accent]),
+                          colors: [AppTheme.primary, AppTheme.accent],
+                        ),
                         borderRadius: BorderRadius.circular(26),
                       ),
-                      child: const Icon(Icons.bolt_rounded,
-                          size: 46, color: Colors.white),
+                      child: const Icon(
+                        Icons.bolt_rounded,
+                        size: 46,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 22),
-                    const Text('FluxChat',
-                        style: TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.textPrimary)),
+                    const Text(
+                      'FluxChat',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 52),
                     AnimatedOpacity(
                       opacity: _showLogin ? 1 : 0,
@@ -159,25 +175,32 @@ class _SplashScreenState extends State<SplashScreen>
                               : null,
                           icon: authProvider.isLoading
                               ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                              : const Icon(Icons.g_mobiledata,
-                              size: 28, color: AppTheme.primary),
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.g_mobiledata,
+                                  size: 28,
+                                  color: AppTheme.primary,
+                                ),
                           label: Text(
                             authProvider.isLoading
                                 ? 'Kirilmoqda...'
                                 : 'Google bilan kirish',
                             style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppTheme.primary),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24)),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
                           ),
                         ),
                       ),

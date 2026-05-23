@@ -5,9 +5,10 @@ import 'package:path_provider/path_provider.dart';
 
 class AudioService {
   final AudioRecorder _recorder = AudioRecorder();
-  final AudioPlayer   _player   = AudioPlayer();
+  final AudioPlayer _player = AudioPlayer();
 
   PlayerState _playerState = PlayerState.stopped;
+
   PlayerState get playerState => _playerState;
 
   AudioService() {
@@ -21,8 +22,9 @@ class AudioService {
     if (kIsWeb) return false;
     try {
       if (!await _recorder.hasPermission()) return false;
-      final dir  = await getTemporaryDirectory();
-      final path = '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final dir = await getTemporaryDirectory();
+      final path =
+          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _recorder.start(const RecordConfig(), path: path);
       return true;
     } catch (e) {

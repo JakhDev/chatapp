@@ -7,17 +7,19 @@ import 'package:chatapp/models/Chat.dart';
 enum WsStatus { disconnected, connecting, connected, error }
 
 class WebSocketService extends ChangeNotifier {
-  WebSocketChannel?   _channel;
-  WsStatus            _status = WsStatus.disconnected;
+  WebSocketChannel? _channel;
+  WsStatus _status = WsStatus.disconnected;
   StreamSubscription? _sub;
-  Timer?              _reconnectTimer;
-  Timer?              _pingTimer;
+  Timer? _reconnectTimer;
+  Timer? _pingTimer;
 
   final _msgCtrl = StreamController<Message>.broadcast();
 
-  WsStatus        get status      => _status;
-  Stream<Message> get msgStream   => _msgCtrl.stream;
-  bool            get isConnected => _status == WsStatus.connected;
+  WsStatus get status => _status;
+
+  Stream<Message> get msgStream => _msgCtrl.stream;
+
+  bool get isConnected => _status == WsStatus.connected;
 
   String? _userId;
 
@@ -29,22 +31,20 @@ class WebSocketService extends ChangeNotifier {
       return;
     }
 
-    if (_status == WsStatus.connected ||
-        _status == WsStatus.connecting) return;
+    if (_status == WsStatus.connected || _status == WsStatus.connecting) return;
 
     _userId = userId;
     _setStatus(WsStatus.connecting);
 
     try {
-      _channel = WebSocketChannel.connect(
-          Uri.parse('ws://localhost:8080'));
+      _channel = WebSocketChannel.connect(Uri.parse('ws://localhost:8080'));
       await _channel!.ready;
       _setStatus(WsStatus.connected);
 
       _sub = _channel!.stream.listen(
         _onData,
         onError: _onError,
-        onDone:  _onDone,
+        onDone: _onDone,
         cancelOnError: false,
       );
 
@@ -63,28 +63,30 @@ class WebSocketService extends ChangeNotifier {
   }
 
   void sendMessage({
-    required String     chatId,
-    required String     senderId,
-    required String     senderName,
-    required String     content,
-    MessageType         type = MessageType.text,
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String content,
+    MessageType type = MessageType.text,
   }) {
     if (kIsWeb || !isConnected) return;
 
     _send({
-      'type':   'message',
+      'type': 'message',
       'chatId': chatId,
       'message': {
-        'id':         '${DateTime.now().millisecondsSinceEpoch}',
-        'chatid':     chatId,
-        'senderid':   senderId,
+        'id': '${DateTime.now().millisecondsSinceEpoch}',
+        'chatid': chatId,
+        'senderid': senderId,
         'sendername': senderName,
-        'content':    content,
-        'type':       type == MessageType.image ? 'image'
-            : type == MessageType.audio ? 'audio'
+        'content': content,
+        'type': type == MessageType.image
+            ? 'image'
+            : type == MessageType.audio
+            ? 'audio'
             : 'text',
-        'timestamp':  DateTime.now().toIso8601String(),
-        'isread':     false,
+        'timestamp': DateTime.now().toIso8601String(),
+        'isread': false,
       },
     });
   }
@@ -94,7 +96,8 @@ class WebSocketService extends ChangeNotifier {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
       if (json['type'] == 'message') {
         final msgJson = Map<String, dynamic>.from(
-            json['message'] as Map<String, dynamic>);
+          json['message'] as Map<String, dynamic>,
+        );
         if ((msgJson['chatId'] as String? ?? '').isEmpty) {
           msgJson['chatId'] = json['chatId'] as String? ?? '';
         }
@@ -131,17 +134,16 @@ class WebSocketService extends ChangeNotifier {
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(
       const Duration(seconds: 25),
-          (_) => _send({'type': 'ping'}),
+      (_) => _send({'type': 'ping'}),
     );
   }
 
   void _scheduleReconnect() {
     if (kIsWeb) return;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(
-      const Duration(seconds: 4),
-          () { if (_userId != null) connect(_userId!); },
-    );
+    _reconnectTimer = Timer(const Duration(seconds: 4), () {
+      if (_userId != null) connect(_userId!);
+    });
   }
 
   void _setStatus(WsStatus s) {

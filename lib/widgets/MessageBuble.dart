@@ -16,11 +16,11 @@ String _fmtTime(DateTime dt) {
 //  MessageBubble — tashqi widget (ChatScreen ishlatadi)
 // ═══════════════════════════════════════════════════════════════════════════════
 class MessageBubble extends StatelessWidget {
-  final Message      message;
-  final bool         isMine;
-  final bool         showSenderName;
-  final bool         isSelected;
-  final bool         isSelectionMode;
+  final Message message;
+  final bool isMine;
+  final bool showSenderName;
+  final bool isSelected;
+  final bool isSelectionMode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final Function(String)? onImageTap;
@@ -42,13 +42,11 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap:       onTap,
+      onTap: onTap,
       onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        color: isSelected
-            ? AppTheme.primary.withAlpha(40)
-            : Colors.transparent,
+        color: isSelected ? AppTheme.primary.withAlpha(40) : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Align(
           alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -57,11 +55,11 @@ class MessageBubble extends StatelessWidget {
               maxWidth: MediaQuery.of(context).size.width * 0.78,
             ),
             child: _BubbleContent(
-              message:        message,
-              isMine:         isMine,
+              message: message,
+              isMine: isMine,
               showSenderName: showSenderName,
-              onImageTap:     onImageTap,
-              onVideoTap:     onVideoTap,
+              onImageTap: onImageTap,
+              onVideoTap: onVideoTap,
             ),
           ),
         ),
@@ -75,8 +73,8 @@ class MessageBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _BubbleContent extends StatelessWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
   final Function(String)? onImageTap;
   final Function(String)? onVideoTap;
 
@@ -95,22 +93,22 @@ class _BubbleContent extends StatelessWidget {
     }
     if (message.type == MessageType.audio) {
       return _AudioBubble(
-        message:        message,
-        isMine:         isMine,
+        message: message,
+        isMine: isMine,
         showSenderName: showSenderName,
       );
     }
     if (message.type == MessageType.image) {
       return _ImageBubble(
-        message:        message,
-        isMine:         isMine,
+        message: message,
+        isMine: isMine,
         showSenderName: showSenderName,
-        onImageTap:     onImageTap,
+        onImageTap: onImageTap,
       );
     }
     return _TextBubble(
-      message:        message,
-      isMine:         isMine,
+      message: message,
+      isMine: isMine,
       showSenderName: showSenderName,
     );
   }
@@ -121,8 +119,8 @@ class _BubbleContent extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _AudioBubble extends StatefulWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
 
   const _AudioBubble({
     required this.message,
@@ -137,13 +135,13 @@ class _AudioBubble extends StatefulWidget {
 class _AudioBubbleState extends State<_AudioBubble>
     with SingleTickerProviderStateMixin {
   final AudioPlayer _player = AudioPlayer();
-  bool     _isPlaying = false;
-  bool     _isLoading = false;
-  Duration _duration  = Duration.zero;
-  Duration _position  = Duration.zero;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
 
   late final AnimationController _waveAnim = AnimationController(
-    vsync:    this,
+    vsync: this,
     duration: const Duration(milliseconds: 700),
   );
 
@@ -159,7 +157,8 @@ class _AudioBubbleState extends State<_AudioBubble>
       if (!mounted) return;
       setState(() {
         _isPlaying = s.playing;
-        _isLoading = s.processingState == ProcessingState.loading ||
+        _isLoading =
+            s.processingState == ProcessingState.loading ||
             s.processingState == ProcessingState.buffering;
       });
       if (s.playing) {
@@ -212,7 +211,10 @@ class _AudioBubbleState extends State<_AudioBubble>
 
   double get _progress {
     if (_duration.inMilliseconds == 0) return 0;
-    return (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
+    return (_position.inMilliseconds / _duration.inMilliseconds).clamp(
+      0.0,
+      1.0,
+    );
   }
 
   String _fmt(Duration d) {
@@ -223,25 +225,25 @@ class _AudioBubbleState extends State<_AudioBubble>
 
   @override
   Widget build(BuildContext context) {
-    final bg          = widget.isMine ? AppTheme.primary : AppTheme.surface;
+    final bg = widget.isMine ? AppTheme.primary : AppTheme.surface;
     final activeColor = widget.isMine ? Colors.white : AppTheme.primary;
     final inactiveClr = widget.isMine ? Colors.white38 : Colors.white24;
-    const textColor   = Colors.white;
+    const textColor = Colors.white;
 
     return Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.only(
-          topLeft:     const Radius.circular(18),
-          topRight:    const Radius.circular(18),
-          bottomLeft:  Radius.circular(widget.isMine ? 18 : 4),
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(widget.isMine ? 18 : 4),
           bottomRight: Radius.circular(widget.isMine ? 4 : 18),
         ),
         boxShadow: [
           BoxShadow(
-            color:      Colors.black.withAlpha(40),
+            color: Colors.black.withAlpha(40),
             blurRadius: 6,
-            offset:     const Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -256,8 +258,8 @@ class _AudioBubbleState extends State<_AudioBubble>
               child: Text(
                 widget.message.senderName,
                 style: TextStyle(
-                  color:      activeColor,
-                  fontSize:   12,
+                  color: activeColor,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -266,8 +268,8 @@ class _AudioBubbleState extends State<_AudioBubble>
           if (widget.message.replyToId != null)
             _ReplyPreview(
               senderName: widget.message.replyToSender ?? '',
-              content:    widget.message.replyToContent ?? '',
-              isMine:     widget.isMine,
+              content: widget.message.replyToContent ?? '',
+              isMine: widget.isMine,
             ),
 
           Row(
@@ -276,7 +278,7 @@ class _AudioBubbleState extends State<_AudioBubble>
               GestureDetector(
                 onTap: _toggle,
                 child: Container(
-                  width:  42,
+                  width: 42,
                   height: 42,
                   decoration: BoxDecoration(
                     color: Colors.white.withAlpha(30),
@@ -284,19 +286,19 @@ class _AudioBubbleState extends State<_AudioBubble>
                   ),
                   child: _isLoading
                       ? const Padding(
-                    padding: EdgeInsets.all(11),
-                    child:   CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color:       Colors.white,
-                    ),
-                  )
+                          padding: EdgeInsets.all(11),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : Icon(
-                    _isPlaying
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    color: textColor,
-                    size:  24,
-                  ),
+                          _isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: textColor,
+                          size: 24,
+                        ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -307,30 +309,33 @@ class _AudioBubbleState extends State<_AudioBubble>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _WaveformBars(
-                      progress:      _progress,
-                      isPlaying:     _isPlaying,
-                      activeColor:   activeColor,
+                      progress: _progress,
+                      isPlaying: _isPlaying,
+                      activeColor: activeColor,
                       inactiveColor: inactiveClr,
-                      animation:     _waveAnim,
+                      animation: _waveAnim,
                     ),
                     const SizedBox(height: 2),
                     SliderTheme(
                       data: SliderThemeData(
-                        trackHeight:        2,
-                        thumbShape:         const RoundSliderThumbShape(
-                            enabledThumbRadius: 5),
-                        overlayShape:       SliderComponentShape.noOverlay,
-                        activeTrackColor:   activeColor,
+                        trackHeight: 2,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 5,
+                        ),
+                        overlayShape: SliderComponentShape.noOverlay,
+                        activeTrackColor: activeColor,
                         inactiveTrackColor: inactiveClr,
-                        thumbColor:         activeColor,
+                        thumbColor: activeColor,
                       ),
                       child: Slider(
-                        value:     _progress,
+                        value: _progress,
                         onChanged: (v) {
-                          _player.seek(Duration(
-                            milliseconds:
-                            (v * _duration.inMilliseconds).round(),
-                          ));
+                          _player.seek(
+                            Duration(
+                              milliseconds: (v * _duration.inMilliseconds)
+                                  .round(),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -350,15 +355,15 @@ class _AudioBubbleState extends State<_AudioBubble>
                       ? _fmt(_position)
                       : _fmt(_duration),
                   style: TextStyle(
-                    color:    textColor.withAlpha(100),
+                    color: textColor.withAlpha(100),
                     fontSize: 11,
                   ),
                 ),
                 _TimeStatus(
-                  time:   _fmtTime(widget.message.timestamp),
+                  time: _fmtTime(widget.message.timestamp),
                   isMine: widget.isMine,
                   isRead: widget.message.isRead,
-                  color:  textColor.withAlpha(180),
+                  color: textColor.withAlpha(180),
                 ),
               ],
             ),
@@ -373,10 +378,10 @@ class _AudioBubbleState extends State<_AudioBubble>
 //  Waveform bars animatsiyasi
 // ═══════════════════════════════════════════════════════════════════════════════
 class _WaveformBars extends StatelessWidget {
-  final double              progress;
-  final bool                isPlaying;
-  final Color               activeColor;
-  final Color               inactiveColor;
+  final double progress;
+  final bool isPlaying;
+  final Color activeColor;
+  final Color inactiveColor;
   final AnimationController animation;
 
   const _WaveformBars({
@@ -388,24 +393,50 @@ class _WaveformBars extends StatelessWidget {
   });
 
   static const _heights = [
-    5.0, 10.0, 7.0, 14.0, 9.0, 18.0, 12.0, 16.0, 7.0,
-    20.0, 9.0, 15.0, 11.0, 18.0, 7.0, 13.0, 17.0, 9.0,
-    15.0, 11.0, 19.0, 7.0, 13.0, 16.0, 5.0, 9.0, 14.0,
-    11.0, 7.0, 13.0,
+    5.0,
+    10.0,
+    7.0,
+    14.0,
+    9.0,
+    18.0,
+    12.0,
+    16.0,
+    7.0,
+    20.0,
+    9.0,
+    15.0,
+    11.0,
+    18.0,
+    7.0,
+    13.0,
+    17.0,
+    9.0,
+    15.0,
+    11.0,
+    19.0,
+    7.0,
+    13.0,
+    16.0,
+    5.0,
+    9.0,
+    14.0,
+    11.0,
+    7.0,
+    13.0,
   ];
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: animation,
-      builder:   (_, __) => SizedBox(
+      builder: (_, __) => SizedBox(
         height: 22,
-        child:  Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: List.generate(_heights.length, (i) {
             final barPct = i / _heights.length;
             final isPast = barPct <= progress;
-            double h     = _heights[i];
+            double h = _heights[i];
             if (isPlaying && (barPct - progress).abs() < 0.12) {
               h = h * (0.65 + 0.35 * animation.value);
             }
@@ -414,9 +445,9 @@ class _WaveformBars extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 80),
-                  height:   h,
+                  height: h,
                   decoration: BoxDecoration(
-                    color:        isPast ? activeColor : inactiveColor,
+                    color: isPast ? activeColor : inactiveColor,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -434,8 +465,8 @@ class _WaveformBars extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _TextBubble extends StatelessWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
 
   const _TextBubble({
     required this.message,
@@ -451,16 +482,16 @@ class _TextBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.only(
-          topLeft:     const Radius.circular(18),
-          topRight:    const Radius.circular(18),
-          bottomLeft:  Radius.circular(isMine ? 18 : 4),
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(isMine ? 18 : 4),
           bottomRight: Radius.circular(isMine ? 4 : 18),
         ),
         boxShadow: [
           BoxShadow(
-            color:      Colors.black.withAlpha(40),
+            color: Colors.black.withAlpha(40),
             blurRadius: 6,
-            offset:     const Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -475,8 +506,8 @@ class _TextBubble extends StatelessWidget {
               child: Text(
                 message.senderName,
                 style: TextStyle(
-                  color:      isMine ? Colors.white70 : AppTheme.primary,
-                  fontSize:   12,
+                  color: isMine ? Colors.white70 : AppTheme.primary,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -485,23 +516,21 @@ class _TextBubble extends StatelessWidget {
           if (message.replyToId != null)
             _ReplyPreview(
               senderName: message.replyToSender ?? '',
-              content:    message.replyToContent ?? '',
-              isMine:     isMine,
+              content: message.replyToContent ?? '',
+              isMine: isMine,
             ),
 
           Row(
-            mainAxisSize:       MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Flexible(
                 child: Text(
-                  message.isEdited
-                      ? '${message.content}  '
-                      : message.content,
+                  message.isEdited ? '${message.content}  ' : message.content,
                   style: const TextStyle(
-                    color:    Colors.white,
+                    color: Colors.white,
                     fontSize: 14.5,
-                    height:   1.35,
+                    height: 1.35,
                   ),
                 ),
               ),
@@ -513,16 +542,16 @@ class _TextBubble extends StatelessWidget {
                     Text(
                       'tahrirlangan  ',
                       style: TextStyle(
-                        color:     Colors.white.withAlpha(140),
-                        fontSize:  10,
+                        color: Colors.white.withAlpha(140),
+                        fontSize: 10,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
                   _TimeStatus(
-                    time:   _fmtTime(message.timestamp),
+                    time: _fmtTime(message.timestamp),
                     isMine: isMine,
                     isRead: message.isRead,
-                    color:  Colors.white60,
+                    color: Colors.white60,
                   ),
                 ],
               ),
@@ -539,8 +568,8 @@ class _TextBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _ImageBubble extends StatelessWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
   final Function(String)? onImageTap;
 
   const _ImageBubble({
@@ -559,16 +588,16 @@ class _ImageBubble extends StatelessWidget {
         height: 240,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.only(
-            topLeft:     const Radius.circular(18),
-            topRight:    const Radius.circular(18),
-            bottomLeft:  Radius.circular(isMine ? 18 : 4),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isMine ? 18 : 4),
             bottomRight: Radius.circular(isMine ? 4 : 18),
           ),
           boxShadow: [
             BoxShadow(
-              color:      Colors.black.withAlpha(40),
+              color: Colors.black.withAlpha(40),
               blurRadius: 6,
-              offset:     const Offset(0, 2),
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -577,25 +606,26 @@ class _ImageBubble extends StatelessWidget {
           children: [
             Image.network(
               message.content,
-              fit:   BoxFit.cover,
+              fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
               errorBuilder: (_, __, ___) => Container(
-                width:  240,
+                width: 240,
                 height: 240,
-                color:  AppTheme.surfaceLight,
-                child:  const Icon(Icons.broken_image_outlined,
-                    color: AppTheme.textSecondary),
+                color: AppTheme.surfaceLight,
+                child: const Icon(
+                  Icons.broken_image_outlined,
+                  color: AppTheme.textSecondary,
+                ),
               ),
               loadingBuilder: (_, child, progress) => progress == null
                   ? child
                   : Container(
-                width:  240,
-                height: 240,
-                color:  AppTheme.surfaceLight,
-                child:  const Center(
-                    child: CircularProgressIndicator()),
-              ),
+                      width: 240,
+                      height: 240,
+                      color: AppTheme.surfaceLight,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
             ),
             Positioned(
               top: 8,
@@ -607,19 +637,21 @@ class _ImageBubble extends StatelessWidget {
                   color: Colors.black.withAlpha(120),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.fullscreen,
-                    color: Colors.white,
-                    size: 16),
+                child: const Icon(
+                  Icons.fullscreen,
+                  color: Colors.white,
+                  size: 16,
+                ),
               ),
             ),
             Positioned(
               bottom: 6,
-              right:  8,
+              right: 8,
               child: _TimeStatus(
-                time:       _fmtTime(message.timestamp),
-                isMine:     isMine,
-                isRead:     message.isRead,
-                color:      Colors.white,
+                time: _fmtTime(message.timestamp),
+                isMine: isMine,
+                isRead: message.isRead,
+                color: Colors.white,
                 withShadow: true,
               ),
             ),
@@ -635,8 +667,8 @@ class _ImageBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _VideoBubble extends StatelessWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
   final Function(String)? onVideoTap;
 
   const _VideoBubble({
@@ -655,16 +687,16 @@ class _VideoBubble extends StatelessWidget {
         height: 240,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.only(
-            topLeft:     const Radius.circular(18),
-            topRight:    const Radius.circular(18),
-            bottomLeft:  Radius.circular(isMine ? 18 : 4),
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isMine ? 18 : 4),
             bottomRight: Radius.circular(isMine ? 4 : 18),
           ),
           boxShadow: [
             BoxShadow(
-              color:      Colors.black.withAlpha(40),
+              color: Colors.black.withAlpha(40),
               blurRadius: 6,
-              offset:     const Offset(0, 2),
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -675,8 +707,11 @@ class _VideoBubble extends StatelessWidget {
               width: 240,
               height: 240,
               color: AppTheme.surfaceLight,
-              child: const Icon(Icons.video_library_outlined,
-                  size: 60, color: AppTheme.textSecondary),
+              child: const Icon(
+                Icons.video_library_outlined,
+                size: 60,
+                color: AppTheme.textSecondary,
+              ),
             ),
             Center(
               child: Container(
@@ -686,18 +721,21 @@ class _VideoBubble extends StatelessWidget {
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.play_arrow_rounded,
-                    size: 32, color: AppTheme.primary),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  size: 32,
+                  color: AppTheme.primary,
+                ),
               ),
             ),
             Positioned(
               bottom: 6,
-              right:  8,
+              right: 8,
               child: _TimeStatus(
-                time:       _fmtTime(message.timestamp),
-                isMine:     isMine,
-                isRead:     message.isRead,
-                color:      Colors.white,
+                time: _fmtTime(message.timestamp),
+                isMine: isMine,
+                isRead: message.isRead,
+                color: Colors.white,
                 withShadow: true,
               ),
             ),
@@ -713,8 +751,8 @@ class _VideoBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _StickerBubble extends StatelessWidget {
   final Message message;
-  final bool    isMine;
-  final bool    showSenderName;
+  final bool isMine;
+  final bool showSenderName;
 
   const _StickerBubble({
     required this.message,
@@ -727,25 +765,24 @@ class _StickerBubble extends StatelessWidget {
     return Container(
       width: 150,
       height: 150,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
       child: Image.network(
         message.content,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(
           color: AppTheme.surfaceLight,
-          child: const Icon(Icons.image_not_supported_outlined,
-              color: AppTheme.textSecondary),
+          child: const Icon(
+            Icons.image_not_supported_outlined,
+            color: AppTheme.textSecondary,
+          ),
         ),
         loadingBuilder: (_, child, progress) => progress == null
             ? child
             : Container(
-          color: AppTheme.surfaceLight,
-          child: const Center(
-              child: CircularProgressIndicator()),
-        ),
+                color: AppTheme.surfaceLight,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
       ),
     );
   }
@@ -756,6 +793,7 @@ class _StickerBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DeletedBubble extends StatelessWidget {
   final bool isMine;
+
   const _DeletedBubble({required this.isMine});
 
   @override
@@ -763,27 +801,28 @@ class _DeletedBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isMine
-            ? AppTheme.primary.withAlpha(120)
-            : AppTheme.surface,
+        color: isMine ? AppTheme.primary.withAlpha(120) : AppTheme.surface,
         borderRadius: BorderRadius.only(
-          topLeft:     const Radius.circular(18),
-          topRight:    const Radius.circular(18),
-          bottomLeft:  Radius.circular(isMine ? 18 : 4),
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(isMine ? 18 : 4),
           bottomRight: Radius.circular(isMine ? 4 : 18),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.block_rounded,
-              size: 14, color: Colors.white.withAlpha(150)),
+          Icon(
+            Icons.block_rounded,
+            size: 14,
+            color: Colors.white.withAlpha(150),
+          ),
           const SizedBox(width: 5),
           Text(
             "O'chirilgan xabar",
             style: TextStyle(
-              color:     Colors.white.withAlpha(150),
-              fontSize:  13.5,
+              color: Colors.white.withAlpha(150),
+              fontSize: 13.5,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -799,7 +838,7 @@ class _DeletedBubble extends StatelessWidget {
 class _ReplyPreview extends StatelessWidget {
   final String senderName;
   final String content;
-  final bool   isMine;
+  final bool isMine;
 
   const _ReplyPreview({
     required this.senderName,
@@ -810,28 +849,29 @@ class _ReplyPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = isMine ? Colors.white70 : AppTheme.primary;
-    final isAudio = content.contains('.m4a') ||
+    final isAudio =
+        content.contains('.m4a') ||
         content.contains('.mp3') ||
         content.contains('audio_');
-    final isImage = content.startsWith('http') &&
+    final isImage =
+        content.startsWith('http') &&
         (content.contains('.jpg') ||
             content.contains('.png') ||
             content.contains('.jpeg') ||
             content.contains('images'));
-    final isVideo = content.startsWith('http') &&
+    final isVideo =
+        content.startsWith('http') &&
         (content.contains('.mp4') ||
             content.contains('.mov') ||
             content.contains('video'));
 
     return Container(
-      margin:  const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color:        Colors.white.withAlpha(20),
+        color: Colors.white.withAlpha(20),
         borderRadius: BorderRadius.circular(10),
-        border: Border(
-          left: BorderSide(color: accentColor, width: 3),
-        ),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -839,21 +879,24 @@ class _ReplyPreview extends StatelessWidget {
           Text(
             senderName,
             style: TextStyle(
-              color:      accentColor,
-              fontSize:   11,
+              color: accentColor,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 2),
           Text(
-            isAudio ? '🎤 Audio xabar'
-                : isVideo ? '🎬 Video'
-                : isImage ? '📷 Rasm'
+            isAudio
+                ? '🎤 Audio xabar'
+                : isVideo
+                ? '🎬 Video'
+                : isImage
+                ? '📷 Rasm'
                 : content,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color:    Colors.white.withAlpha(180),
+              color: Colors.white.withAlpha(180),
               fontSize: 11.5,
             ),
           ),
@@ -868,10 +911,10 @@ class _ReplyPreview extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _TimeStatus extends StatelessWidget {
   final String time;
-  final bool   isMine;
-  final bool   isRead;
-  final Color  color;
-  final bool   withShadow;
+  final bool isMine;
+  final bool isRead;
+  final Color color;
+  final bool withShadow;
 
   const _TimeStatus({
     required this.time,
@@ -891,18 +934,14 @@ class _TimeStatus extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          time,  // ← _fmtTime() tomonidan UTC+5 bilan formatlangan
-          style: TextStyle(
-            color:    color,
-            fontSize: 10.5,
-            shadows:  shadows,
-          ),
+          time, // ← _fmtTime() tomonidan UTC+5 bilan formatlangan
+          style: TextStyle(color: color, fontSize: 10.5, shadows: shadows),
         ),
         if (isMine) ...[
           const SizedBox(width: 3),
           Icon(
             isRead ? Icons.done_all_rounded : Icons.done_rounded,
-            size:  13,
+            size: 13,
             color: isRead ? Colors.lightBlueAccent : color,
             shadows: withShadow
                 ? const [Shadow(color: Colors.black54, blurRadius: 4)]

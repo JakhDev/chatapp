@@ -8,14 +8,19 @@ class AuthProvider extends ChangeNotifier {
   static const _webClientId =
       '964176397631-chab4uo6skkcccq70q04fkgcfsqfcpuu.apps.googleusercontent.com';
 
-  User?   _user;
-  bool    _isLoading = false;
+  User? _user;
+  bool _isLoading = false;
   String? _error;
 
-  User?   get user       => _user;
-  bool    get isLoading  => _isLoading;
-  String? get error      => _error;
-  bool    get isLoggedIn => _supabase.auth.currentSession != null; // To'g'ridan-to'g'ri sessiyadan tekshiramiz
+  User? get user => _user;
+
+  bool get isLoading => _isLoading;
+
+  String? get error => _error;
+
+  bool get isLoggedIn =>
+      _supabase.auth.currentSession !=
+      null; // To'g'ridan-to'g'ri sessiyadan tekshiramiz
 
   AuthProvider() {
     _user = _supabase.auth.currentUser;
@@ -53,15 +58,16 @@ class AuthProvider extends ChangeNotifier {
           return false;
         }
 
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-        final idToken     = googleAuth.idToken;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
+        final idToken = googleAuth.idToken;
         final accessToken = googleAuth.accessToken;
 
         if (idToken == null) throw Exception('ID Token null keldi');
 
         final response = await _supabase.auth.signInWithIdToken(
-          provider:    OAuthProvider.google,
-          idToken:     idToken,
+          provider: OAuthProvider.google,
+          idToken: idToken,
           accessToken: accessToken,
         );
 
@@ -80,9 +86,9 @@ class AuthProvider extends ChangeNotifier {
 
   String get userName =>
       _user?.userMetadata?['full_name'] as String? ??
-          _user?.userMetadata?['name'] as String? ??
-          _user?.email ??
-          'Foydalanuvchi';
+      _user?.userMetadata?['name'] as String? ??
+      _user?.email ??
+      'Foydalanuvchi';
 
   String? get userAvatar => _user?.userMetadata?['avatar_url'] as String?;
 
