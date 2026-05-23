@@ -623,7 +623,7 @@ class _OnlineStatus extends StatelessWidget {
   const _OnlineStatus({required this.isOnline, this.lastSeen});
 
   String _formatLastSeen(DateTime dt) {
-    final now  = DateTime.now().toUtc().add(const Duration(hours: 0));
+    final now  = DateTime.now().toUtc().add(const Duration(hours: 5));
     final uzb  = dt.toUtc().add(const Duration(hours: 5));
     final diff = now.difference(uzb);
     if (diff.inMinutes < 1)  return 'Hozirgina';

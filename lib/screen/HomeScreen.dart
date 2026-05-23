@@ -70,10 +70,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   String get _appBarTitle {
     switch (_selectedIndex) {
-      case 0:  return 'Chats';
-      case 1:  return 'Contacts';
-      case 2:  return 'Settings';
-      case 3:  return 'Profile';
+      case 0:  return 'Chatlar';
+      case 1:  return 'Kontaktlar';
+      case 2:  return 'Sozlamalar';
+      case 3:  return 'Profil';
       default: return '';
     }
   }
@@ -256,10 +256,10 @@ class _AnimatedBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavItem(icon: Icons.chat_bubble_rounded,    label: 'Chats'),
-      _NavItem(icon: Icons.people_alt_rounded,     label: 'Contacts'),
-      _NavItem(icon: Icons.settings_rounded,       label: 'Settings'),
-      _NavItem(icon: Icons.account_circle_rounded, label: 'Profile'),
+      _NavItem(icon: Icons.chat_bubble_rounded,    label: 'Chatlar'),
+      _NavItem(icon: Icons.people_alt_rounded,     label: 'Kontaktlar'),
+      _NavItem(icon: Icons.settings_rounded,       label: 'Sozlamalar'),
+      _NavItem(icon: Icons.account_circle_rounded, label: 'Profil'),
     ];
 
     return Container(
@@ -745,7 +745,7 @@ class _SettingsScreen extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text('ACCOUNT',
+          child: Text('HISOB',
               style: TextStyle(
                   color: AppTheme.primary,
                   fontSize: 12,
@@ -754,42 +754,42 @@ class _SettingsScreen extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.lock_rounded, color: AppTheme.primary),
-          title: const Text('Two-Factor Authentication',
+          title: const Text('Ikki bosqichli tekshiruv',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
-          subtitle: const Text('Enabled',
+          subtitle: const Text("O'chiq",
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           onTap: () {},
         ),
         ListTile(
           leading: const Icon(Icons.language, color: AppTheme.primary),
-          title: const Text('Language',
+          title: const Text('Tillar',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
-          subtitle: const Text('English',
+          subtitle: const Text('Uzbek',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           onTap: () {},
         ),
         ListTile(
           leading: const Icon(Icons.visibility_off_rounded,
               color: AppTheme.primary),
-          title: const Text('Last Seen',
+          title: const Text('Oxirgi faollik',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
-          subtitle: const Text('Everyone',
+          subtitle: const Text('Barcha',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           onTap: () {},
         ),
         const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text('NOTIFICATIONS',
+          child: Text('Bildirishnomalar',
               style: TextStyle(
                   color: AppTheme.primary,
                   fontSize: 12,
@@ -799,18 +799,18 @@ class _SettingsScreen extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.notifications_rounded,
               color: AppTheme.primary),
-          title: const Text('Push Notifications',
+          title: const Text('Ilova bildirishnomalari',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),
           trailing: Switch(
-              value: true, onChanged: (v) {}, activeColor: AppTheme.primary),
+              value: false, onChanged: (v) {}, activeColor: AppTheme.primary),
           onTap: () {},
         ),
         ListTile(
           leading: const Icon(Icons.dark_mode, color: AppTheme.primary),
-          title: const Text('Dark mode',
+          title: const Text("Qorong'u rejim",
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 15,
