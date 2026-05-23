@@ -7,6 +7,8 @@ import 'package:chatapp/widgets/AvatarWidget.dart';
 import 'package:chatapp/screen/ChatScreen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../models/AppSettings.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -67,24 +69,21 @@ class _HomeScreenState extends State<HomeScreen>
 
   bool get _showSearchBar => _selectedIndex == 0 || _selectedIndex == 1;
 
-  String get _appBarTitle {
+  String _appBarTitle(AppSettings s) {
     switch (_selectedIndex) {
-      case 0:
-        return 'Chatlar';
-      case 1:
-        return 'Kontaktlar';
-      case 2:
-        return 'Sozlamalar';
-      case 3:
-        return 'Profil';
-      default:
-        return '';
+      case 0: return s.chats;
+      case 1: return s.contacts;
+      case 2: return s.settings;
+      case 3: return s.profile;
+      default: return '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     const bgColor = AppTheme.background;
+
+    final s = context.watch<AppSettings>(); // ✅ SHU YERGA QO‘Y
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -95,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen>
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: Text(
-            _appBarTitle,
+            _appBarTitle(s),
             key: ValueKey(_selectedIndex),
             style: const TextStyle(
               color: AppTheme.textPrimary,
@@ -877,108 +876,239 @@ class _SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<AppSettings>();
+
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 20),
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text(
-            'HISOB',
-            style: TextStyle(
-              color: AppTheme.primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
+
+        // ── Til ──────────────────────────────────────────────────────────
+        _sectionTitle(s.appearance),
+
+        // Mavzu
+        _SettingsTile(
+          icon:     Icons.brightness_6_rounded,
+          title:    s.theme,
+          subtitle: _themeLabel(s),
+          onTap: () => _showThemeDialog(context, s),
         ),
-        ListTile(
-          leading: const Icon(Icons.lock_rounded, color: AppTheme.primary),
-          title: const Text(
-            'Ikki bosqichli tekshiruv',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          subtitle: const Text(
-            "O'chiq",
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          onTap: () {},
+
+        // Til
+        _SettingsTile(
+          icon:     Icons.language_rounded,
+          title:    _langLabel(s),
+          subtitle: _langLabel(s),
+          onTap: () => _showLanguageDialog(context, s),
         ),
-        ListTile(
-          leading: const Icon(Icons.language, color: AppTheme.primary),
-          title: const Text(
-            'Tillar',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          subtitle: const Text(
-            'Uzbek',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-          onTap: () {},
-        ),
+
         const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text(
-            'Bildirishnomalar',
-            style: TextStyle(
-              color: AppTheme.primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        ListTile(
-          leading: const Icon(
-            Icons.notifications_rounded,
-            color: AppTheme.primary,
-          ),
-          title: const Text(
-            'Ilova bildirishnomalari',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          trailing: Switch(
-            value: false,
-            onChanged: (v) {},
-            activeColor: AppTheme.primary,
-          ),
-          onTap: () {},
-        ),
-        ListTile(
-          leading: const Icon(Icons.dark_mode, color: AppTheme.primary),
-          title: const Text(
-            "Qorong'u rejim",
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          trailing: Switch(
-            value: true,
-            onChanged: (v) {},
-            activeColor: AppTheme.primary,
-          ),
-          onTap: () {},
-        ),
+
+        // ── Hisob ─────────────────────────────────────────────────────────
+        // _sectionTitle(s.account),
+
+        // _SettingsTile(
+        //   icon:     Icons.lock_rounded,
+        //   title:    s.twoStep,
+        //   subtitle: s.off,
+        // ),
+        //
+        // const SizedBox(height: 20),
+
+        // ── Bildirishnomalar ──────────────────────────────────────────────
+        // _sectionTitle(s.notifications),
+
+        // ListTile(
+        //   leading: Container(
+        //     width: 36, height: 36,
+        //     decoration: BoxDecoration(
+        //       color: AppTheme.primary.withOpacity(0.15),
+        //       borderRadius: BorderRadius.circular(10),
+        //     ),
+        //     child: const Icon(Icons.notifications_rounded,
+        //         color: AppTheme.primary, size: 20),
+        //   ),
+        //   title: Text(s.appNotifications,
+        //       style: const TextStyle(
+        //           color: AppTheme.textPrimary,
+        //           fontSize: 15, fontWeight: FontWeight.w600)),
+        //   trailing: Switch(
+        //       value: false, onChanged: (_) {},
+        //       activeColor: AppTheme.primary),
+        // ),
       ],
+    );
+  }
+
+  String _themeLabel(AppSettings s) {
+    switch (s.themeMode) {
+      case AppThemeMode.dark:   return s.darkMode;
+      case AppThemeMode.light:  return s.lightMode;
+      case AppThemeMode.system: return s.systemMode;
+    }
+  }
+
+  String _langLabel(AppSettings s) {
+    switch (s.language) {
+      case AppLanguage.uz: return "O'zbek";
+      case AppLanguage.ru: return 'Русский';
+      case AppLanguage.en: return 'English';
+    }
+  }
+
+  Widget _sectionTitle(String t) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+    child: Text(t, style: const TextStyle(
+        color: AppTheme.primary, fontSize: 12,
+        fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+  );
+
+  void _showThemeDialog(BuildContext ctx, AppSettings s) {
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(s.theme,
+            style: const TextStyle(color: AppTheme.textPrimary)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _RadioTile(
+            label: s.darkMode,
+            icon: Icons.dark_mode_rounded,
+            selected: s.themeMode == AppThemeMode.dark,
+            onTap: () {
+              s.setThemeMode(AppThemeMode.dark);
+              Navigator.pop(ctx);
+            },
+          ),
+          _RadioTile(
+            label: s.lightMode,
+            icon: Icons.light_mode_rounded,
+            selected: s.themeMode == AppThemeMode.light,
+            onTap: () {
+              s.setThemeMode(AppThemeMode.light);
+              Navigator.pop(ctx);
+            },
+          ),
+          _RadioTile(
+            label: s.systemMode,
+            icon: Icons.phone_android_rounded,
+            selected: s.themeMode == AppThemeMode.system,
+            onTap: () {
+              s.setThemeMode(AppThemeMode.system);
+              Navigator.pop(ctx);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _showLanguageDialog(BuildContext ctx, AppSettings s) {
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(_langLabel(s),
+            style: const TextStyle(color: AppTheme.textPrimary)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _RadioTile(
+            label: "O'zbek",
+            icon: Icons.language_rounded,
+            selected: s.language == AppLanguage.uz,
+            onTap: () {
+              s.setLanguage(AppLanguage.uz);
+              Navigator.pop(ctx);
+            },
+          ),
+          _RadioTile(
+            label: 'Русский',
+            icon: Icons.language_rounded,
+            selected: s.language == AppLanguage.ru,
+            onTap: () {
+              s.setLanguage(AppLanguage.ru);
+              Navigator.pop(ctx);
+            },
+          ),
+          _RadioTile(
+            label: 'English',
+            icon: Icons.language_rounded,
+            selected: s.language == AppLanguage.en,
+            onTap: () {
+              s.setLanguage(AppLanguage.en);
+              Navigator.pop(ctx);
+            },
+          ),
+        ]),
+      ),
     );
   }
 }
 
+// ── Settings tile ─────────────────────────────────────────────────────────────
+class _SettingsTile extends StatelessWidget {
+  final IconData    icon;
+  final String      title;
+  final String      subtitle;
+  final VoidCallback? onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    onTap: onTap,
+    leading: Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, color: AppTheme.primary, size: 20),
+    ),
+    title: Text(title, style: const TextStyle(
+        color: AppTheme.textPrimary,
+        fontSize: 15, fontWeight: FontWeight.w600)),
+    subtitle: Text(subtitle, style: const TextStyle(
+        color: AppTheme.textSecondary, fontSize: 13)),
+    trailing: onTap != null
+        ? const Icon(Icons.chevron_right,
+        color: AppTheme.textSecondary, size: 20)
+        : null,
+  );
+}
+
+// ── Radio tile ────────────────────────────────────────────────────────────────
+class _RadioTile extends StatelessWidget {
+  final String       label;
+  final IconData     icon;
+  final bool         selected;
+  final VoidCallback onTap;
+
+  const _RadioTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    onTap: onTap,
+    leading: Icon(icon,
+        color: selected ? AppTheme.primary : AppTheme.textSecondary, size: 22),
+    title: Text(label, style: TextStyle(
+        color: selected ? AppTheme.primary : AppTheme.textPrimary,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+    trailing: selected
+        ? const Icon(Icons.check_circle_rounded, color: AppTheme.primary)
+        : null,
+  );
+}
 // ═══════════════════════════════════════════════════════════════════════════════
 //  PROFILE SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════

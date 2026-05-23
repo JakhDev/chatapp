@@ -47,10 +47,10 @@ class Message {
   final bool isRead;
   final bool isEdited;
   final bool isDeleted;
-
   final String? replyToId;
   final String? replyToContent;
   final String? replyToSender;
+  final int? audioDuration; // ovozli xabar davomiyligi (soniyalarda)
 
   Message({
     required this.id,
@@ -66,6 +66,7 @@ class Message {
     this.replyToId,
     this.replyToContent,
     this.replyToSender,
+    this.audioDuration,
   }) : timestamp = timestamp ?? DateTime.now();
 
   Message copyWith({
@@ -82,6 +83,7 @@ class Message {
     String? replyToId,
     String? replyToContent,
     String? replyToSender,
+    int? audioDuration,
   }) => Message(
     id: id ?? this.id,
     chatId: chatId ?? this.chatId,
@@ -96,6 +98,7 @@ class Message {
     replyToId: replyToId ?? this.replyToId,
     replyToContent: replyToContent ?? this.replyToContent,
     replyToSender: replyToSender ?? this.replyToSender,
+    audioDuration: audioDuration ?? this.audioDuration,
   );
 
   factory Message.fromJson(Map<String, dynamic> j) {
@@ -118,13 +121,14 @@ class Message {
       timestamp: ts,
       isRead: (j['isread'] ?? j['is_read'] ?? j['isRead']) as bool? ?? false,
       isEdited:
-          (j['isedited'] ?? j['is_edited'] ?? j['isEdited']) as bool? ?? false,
+      (j['isedited'] ?? j['is_edited'] ?? j['isEdited']) as bool? ?? false,
       isDeleted:
-          (j['isdeleted'] ?? j['is_deleted'] ?? j['isDeleted']) as bool? ??
+      (j['isdeleted'] ?? j['is_deleted'] ?? j['isDeleted']) as bool? ??
           false,
       replyToId: j['reply_to_id'] as String?,
       replyToContent: j['reply_to_content'] as String?,
       replyToSender: j['reply_to_sender'] as String?,
+      audioDuration: j['audio_duration'] as int?,
     );
   }
 
@@ -144,6 +148,7 @@ class Message {
     'reply_to_id': replyToId,
     'reply_to_content': replyToContent,
     'reply_to_sender': replyToSender,
+    if (audioDuration != null) 'audio_duration': audioDuration,
   };
 }
 
