@@ -48,22 +48,37 @@ class MessageBubble extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         color: isSelected ? AppTheme.primary.withAlpha(40) : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        child: Align(
-          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.78,
-            ),
-            child: _BubbleContent(
-              message: message,
-              isMine: isMine,
-              showSenderName: showSenderName,
-              onImageTap: onImageTap,
-              onVideoTap: onVideoTap,
+        child: IgnorePointer(
+          ignoring: isSelectionMode,
+          child: GestureDetector(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              color: isSelected
+                  ? AppTheme.primary.withAlpha(40)
+                  : Colors.transparent,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Align(
+                alignment: isMine
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.78,
+                  ),
+                  child: _BubbleContent(
+                    message: message,
+                    isMine: isMine,
+                    showSenderName: showSenderName,
+                    onImageTap: onImageTap,
+                    onVideoTap: onVideoTap,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        ),      ),
     );
   }
 }
@@ -579,10 +594,32 @@ class _ImageBubble extends StatelessWidget {
     this.onImageTap,
   });
 
+  // ✅ Image URL yasab beradi
+  String _url() {
+    final raw = message.content.trim();
+
+    // Agar allaqachon to'liq URL bo'lsa
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    // Supabase public storage URL
+    return 'https://lrkweduvjgmqerygvoaw.supabase.co/storage/v1/object/public/chat_bucket/$raw';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final imageUrl = _url();
+
     return GestureDetector(
-      onTap: () => onImageTap?.call(message.content),
+      onTap: () {
+        if (onImageTap != null) {
+          // ✅ To'liq URL ni uzatish
+          if (imageUrl.isNotEmpty) {
+            onImageTap!(imageUrl);
+          }
+        }
+      },
       child: Container(
         width: 240,
         height: 240,
