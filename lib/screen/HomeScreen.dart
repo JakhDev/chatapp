@@ -533,28 +533,25 @@ class _ChatsScreen extends StatelessWidget {
                                 maxLines: 1,
                               ),
                             ),
-                            if (hasUnread)
-                              Container(
-                                padding    : const EdgeInsets.all(6),
-                                decoration : const BoxDecoration(
-                                  color: AppColors.online,
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                                child: Center(
-                                  child: Text(
-                                    '${chat.unreadCount}',
-                                    style: const TextStyle(
-                                      color     : Colors.white,
-                                      fontSize  : 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
+
+                            const SizedBox(width: 6),
+
+                            if (chat.lastMessage != null)
+                              Icon(
+                                chat.lastMessageSenderId == myId
+                                    ? (chat.lastMessageIsRead == true
+                                    ? Icons.done_all
+                                    : Icons.done)
+                                    : Icons.circle,
+                                size: 16,
+                                color: chat.lastMessageSenderId == myId
+                                    ? (chat.lastMessageIsRead == true
+                                    ? Colors.blue
+                                    : c.textSecondary)
+                                    : (hasUnread ? Colors.redAccent : Colors.transparent),
                               ),
                           ],
-                        ),
-                      ],
+                        ),                      ],
                     ),
                   ),
                 ],

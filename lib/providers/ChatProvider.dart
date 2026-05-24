@@ -335,6 +335,7 @@ class ChatProvider extends ChangeNotifier {
     final ci     = _chats.indexWhere((c) => c.id == chatId);
 
     if (ci != -1) {
+      _onNewMessage(chatId, msg);
       final chat       = _chats[ci];
       final pendingIdx = chat.messages.indexWhere(
             (m) =>
@@ -837,7 +838,29 @@ class ChatProvider extends ChangeNotifier {
       if (kDebugMode) print('🚨 loadOldMessages: $e');
     }
   }
+  void _onNewMessage(String chatId, Message msg) {
+    final i = _chats.indexWhere((c) => c.id == chatId);
 
+    if (i != -1) {
+      final chat = _chats[i];
+
+      final updated = Chat(
+        id: chat.id,
+        name: chat.name,
+        type: chat.type,
+        memberIds: chat.memberIds,
+        messages: chat.messages,
+        lastMessage: msg.content,
+        lastMessageTime: msg.timestamp,
+        unreadCount: chat.unreadCount,
+        avatarUrl: chat.avatarUrl,
+      );
+      _chats.removeAt(i);
+      _chats.insert(0, updated);
+    }
+
+    notifyListeners();
+  }
   // ─── fetchOrCreateChat ────────────────────────────────────────────────────
   Future<Chat> fetchOrCreateChat(User other) async {
     final chatId    = normalizeChatId(_me!.id, other.id);

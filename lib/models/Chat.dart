@@ -162,6 +162,8 @@ class Chat {
   String? lastMessage;
   DateTime? lastMessageTime;
   int unreadCount;
+  final String? lastMessageSenderId;
+  final bool? lastMessageIsRead;
   String? avatarUrl;
 
   Chat({
@@ -173,6 +175,9 @@ class Chat {
     this.lastMessage,
     this.lastMessageTime,
     this.unreadCount = 0,
+    this.lastMessageSenderId,
+    this.lastMessageIsRead,
+
     this.avatarUrl,
   }) : messages = messages ?? [];
 }
