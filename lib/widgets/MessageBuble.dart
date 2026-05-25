@@ -4,16 +4,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:chatapp/models/Chat.dart';
 import 'package:chatapp/theme/AppTheme.dart';
 
-// ── Helper: timestamp → '14:38' (O'zbekiston vaqti UTC+5) ─────────────────────
 String _fmtTime(DateTime dt) {
-  final uzb = dt.toUtc().add(const Duration(hours: 0));
-  final h = uzb.hour.toString().padLeft(2, '0');
-  final m = uzb.minute.toString().padLeft(2, '0');
+  final h = dt.hour.toString().padLeft(2, '0');
+  final m = dt.minute.toString().padLeft(2, '0');
   return '$h:$m';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  MessageBubble — tashqi widget (ChatScreen ishlatadi)
+//  MessageBubble
 // ═══════════════════════════════════════════════════════════════════════════════
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -41,50 +39,85 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX 1: Selection modeda ham to'g'ri alignment saqlansin
+    // isMine bo'lsa o'ng, bo'lmasa chap — selection modeda ham o'zgarmaydi
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        color: isSelected ? AppTheme.primary.withAlpha(40) : Colors.transparent,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        child: IgnorePointer(
-          ignoring: isSelectionMode,
-          child: GestureDetector(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              color: isSelected
-                  ? AppTheme.primary.withAlpha(40)
-                  : Colors.transparent,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Align(
-                alignment: isMine
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.78,
-                  ),
-                  child: _BubbleContent(
-                    message: message,
-                    isMine: isMine,
-                    showSenderName: showSenderName,
-                    onImageTap: onImageTap,
-                    onVideoTap: onVideoTap,
-                  ),
-                ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          // Selection modeda alignment o'zgarmaydi — bubble o'z joyida qoladi
+          mainAxisAlignment:
+          isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            // Checkbox — faqat selection modeda ko'rinadi
+            // isMine bo'lsa o'ng tomonda, bo'lmasa chap tomonda
+            if (isSelectionMode && !isMine)
+              Padding(
+                padding: const EdgeInsets.only(right: 8, top: 6),
+                child: _CheckboxCircle(isSelected: isSelected),
+              ),
+
+            // Bubble o'z joyida qoladi
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.78,
+              ),
+              child: _BubbleContent(
+                message: message,
+                isMine: isMine,
+                showSenderName: showSenderName,
+                onImageTap: onImageTap,
+                onVideoTap: onVideoTap,
               ),
             ),
-          ),
-        ),      ),
+
+            // isMine bo'lsa checkbox o'ng tomonda
+            if (isSelectionMode && isMine)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 6),
+                child: _CheckboxCircle(isSelected: isSelected),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Bubble content — xabar turiga qarab render
+//  Checkbox Circle
+// ═══════════════════════════════════════════════════════════════════════════════
+class _CheckboxCircle extends StatelessWidget {
+  final bool isSelected;
+  const _CheckboxCircle({required this.isSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: !isSelected
+            ? Border.all(
+            color: AppTheme.textSecondary.withAlpha(150), width: 2)
+            : null,
+        color: isSelected ? AppTheme.primary : Colors.transparent,
+      ),
+      child: isSelected
+          ? const Icon(Icons.check_rounded, color: Colors.white, size: 15)
+          : null,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Bubble content
 // ═══════════════════════════════════════════════════════════════════════════════
 class _BubbleContent extends StatelessWidget {
   final Message message;
@@ -103,15 +136,12 @@ class _BubbleContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (message.isDeleted) {
-      return _DeletedBubble(isMine: isMine);
-    }
+    if (message.isDeleted) return _DeletedBubble(isMine: isMine);
     if (message.type == MessageType.audio) {
       return _AudioBubble(
-        message: message,
-        isMine: isMine,
-        showSenderName: showSenderName,
-      );
+          message: message,
+          isMine: isMine,
+          showSenderName: showSenderName);
     }
     if (message.type == MessageType.image) {
       return _ImageBubble(
@@ -122,15 +152,12 @@ class _BubbleContent extends StatelessWidget {
       );
     }
     return _TextBubble(
-      message: message,
-      isMine: isMine,
-      showSenderName: showSenderName,
-    );
+        message: message, isMine: isMine, showSenderName: showSenderName);
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Audio bubble — Telegram uslubida
+//  Audio bubble
 // ═══════════════════════════════════════════════════════════════════════════════
 class _AudioBubble extends StatefulWidget {
   final Message message;
@@ -168,12 +195,17 @@ class _AudioBubbleState extends State<_AudioBubble>
   void initState() {
     super.initState();
 
+    // Duration ni message dan oldindan o'rnat
+    if (widget.message.audioDuration != null &&
+        widget.message.audioDuration! > 0) {
+      _duration = Duration(seconds: widget.message.audioDuration!);
+    }
+
     _stateSub = _player.playerStateStream.listen((s) {
       if (!mounted) return;
       setState(() {
         _isPlaying = s.playing;
-        _isLoading =
-            s.processingState == ProcessingState.loading ||
+        _isLoading = s.processingState == ProcessingState.loading ||
             s.processingState == ProcessingState.buffering;
       });
       if (s.playing) {
@@ -193,7 +225,7 @@ class _AudioBubbleState extends State<_AudioBubble>
     });
 
     _durSub = _player.durationStream.listen((d) {
-      if (mounted) setState(() => _duration = d ?? Duration.zero);
+      if (d != null && mounted) setState(() => _duration = d);
     });
   }
 
@@ -216,7 +248,7 @@ class _AudioBubbleState extends State<_AudioBubble>
         try {
           await _player.setUrl(widget.message.content);
         } catch (_) {
-          setState(() => _isLoading = false);
+          if (mounted) setState(() => _isLoading = false);
           return;
         }
       }
@@ -226,10 +258,8 @@ class _AudioBubbleState extends State<_AudioBubble>
 
   double get _progress {
     if (_duration.inMilliseconds == 0) return 0;
-    return (_position.inMilliseconds / _duration.inMilliseconds).clamp(
-      0.0,
-      1.0,
-    );
+    return (_position.inMilliseconds / _duration.inMilliseconds)
+        .clamp(0.0, 1.0);
   }
 
   String _fmt(Duration d) {
@@ -242,7 +272,8 @@ class _AudioBubbleState extends State<_AudioBubble>
   Widget build(BuildContext context) {
     final bg = widget.isMine ? AppTheme.primary : AppTheme.surface;
     final activeColor = widget.isMine ? Colors.white : AppTheme.primary;
-    final inactiveClr = widget.isMine ? Colors.white38 : Colors.white24;
+    final inactiveClr =
+    widget.isMine ? Colors.white38 : Colors.white24;
     const textColor = Colors.white;
 
     return Container(
@@ -256,10 +287,9 @@ class _AudioBubbleState extends State<_AudioBubble>
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(40),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.black.withAlpha(40),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
         ],
       ),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
@@ -270,23 +300,18 @@ class _AudioBubbleState extends State<_AudioBubble>
           if (widget.showSenderName)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                widget.message.senderName,
-                style: TextStyle(
-                  color: activeColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: Text(widget.message.senderName,
+                  style: TextStyle(
+                      color: activeColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ),
-
           if (widget.message.replyToId != null)
             _ReplyPreview(
               senderName: widget.message.replyToSender ?? '',
               content: widget.message.replyToContent ?? '',
               isMine: widget.isMine,
             ),
-
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -296,28 +321,23 @@ class _AudioBubbleState extends State<_AudioBubble>
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(30),
-                    shape: BoxShape.circle,
-                  ),
+                      color: Colors.white.withAlpha(30),
+                      shape: BoxShape.circle),
                   child: _isLoading
                       ? const Padding(
-                          padding: EdgeInsets.all(11),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                    padding: EdgeInsets.all(11),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
                       : Icon(
-                          _isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          color: textColor,
-                          size: 24,
-                        ),
+                      _isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: textColor,
+                      size: 24),
                 ),
               ),
               const SizedBox(width: 8),
-
               SizedBox(
                 width: 160,
                 child: Column(
@@ -335,8 +355,7 @@ class _AudioBubbleState extends State<_AudioBubble>
                       data: SliderThemeData(
                         trackHeight: 2,
                         thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 5,
-                        ),
+                            enabledThumbRadius: 5),
                         overlayShape: SliderComponentShape.noOverlay,
                         activeTrackColor: activeColor,
                         inactiveTrackColor: inactiveClr,
@@ -345,12 +364,9 @@ class _AudioBubbleState extends State<_AudioBubble>
                       child: Slider(
                         value: _progress,
                         onChanged: (v) {
-                          _player.seek(
-                            Duration(
-                              milliseconds: (v * _duration.inMilliseconds)
-                                  .round(),
-                            ),
-                          );
+                          _player.seek(Duration(
+                              milliseconds:
+                              (v * _duration.inMilliseconds).round()));
                         },
                       ),
                     ),
@@ -359,7 +375,6 @@ class _AudioBubbleState extends State<_AudioBubble>
               ),
             ],
           ),
-
           Padding(
             padding: const EdgeInsets.only(left: 50, top: 2),
             child: Row(
@@ -370,9 +385,7 @@ class _AudioBubbleState extends State<_AudioBubble>
                       ? _fmt(_position)
                       : _fmt(_duration),
                   style: TextStyle(
-                    color: textColor.withAlpha(100),
-                    fontSize: 11,
-                  ),
+                      color: textColor.withAlpha(100), fontSize: 11),
                 ),
                 _TimeStatus(
                   time: _fmtTime(widget.message.timestamp),
@@ -390,7 +403,7 @@ class _AudioBubbleState extends State<_AudioBubble>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Waveform bars animatsiyasi
+//  Waveform bars
 // ═══════════════════════════════════════════════════════════════════════════════
 class _WaveformBars extends StatelessWidget {
   final double progress;
@@ -408,36 +421,9 @@ class _WaveformBars extends StatelessWidget {
   });
 
   static const _heights = [
-    5.0,
-    10.0,
-    7.0,
-    14.0,
-    9.0,
-    18.0,
-    12.0,
-    16.0,
-    7.0,
-    20.0,
-    9.0,
-    15.0,
-    11.0,
-    18.0,
-    7.0,
-    13.0,
-    17.0,
-    9.0,
-    15.0,
-    11.0,
-    19.0,
-    7.0,
-    13.0,
-    16.0,
-    5.0,
-    9.0,
-    14.0,
-    11.0,
-    7.0,
-    13.0,
+    5.0, 10.0, 7.0, 14.0, 9.0, 18.0, 12.0, 16.0, 7.0, 20.0,
+    9.0, 15.0, 11.0, 18.0, 7.0, 13.0, 17.0, 9.0, 15.0, 11.0,
+    19.0, 7.0, 13.0, 16.0, 5.0, 9.0, 14.0, 11.0, 7.0, 13.0,
   ];
 
   @override
@@ -504,10 +490,9 @@ class _TextBubble extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(40),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.black.withAlpha(40),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
         ],
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
@@ -518,35 +503,32 @@ class _TextBubble extends StatelessWidget {
           if (showSenderName)
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                message.senderName,
-                style: TextStyle(
-                  color: isMine ? Colors.white70 : AppTheme.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              child: Text(message.senderName,
+                  style: TextStyle(
+                      color:
+                      isMine ? Colors.white70 : AppTheme.primary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
             ),
-
           if (message.replyToId != null)
             _ReplyPreview(
               senderName: message.replyToSender ?? '',
               content: message.replyToContent ?? '',
               isMine: isMine,
             ),
-
           Row(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Flexible(
                 child: Text(
-                  message.isEdited ? '${message.content}  ' : message.content,
+                  message.isEdited
+                      ? '${message.content}  '
+                      : message.content,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14.5,
-                    height: 1.35,
-                  ),
+                      color: Colors.white,
+                      fontSize: 14.5,
+                      height: 1.35),
                 ),
               ),
               const SizedBox(width: 4),
@@ -554,14 +536,11 @@ class _TextBubble extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (message.isEdited)
-                    Text(
-                      'tahrirlangan  ',
-                      style: TextStyle(
-                        color: Colors.white.withAlpha(140),
-                        fontSize: 10,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
+                    Text('tahrirlangan  ',
+                        style: TextStyle(
+                            color: Colors.white.withAlpha(140),
+                            fontSize: 10,
+                            fontStyle: FontStyle.italic)),
                   _TimeStatus(
                     time: _fmtTime(message.timestamp),
                     isMine: isMine,
@@ -579,7 +558,7 @@ class _TextBubble extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Image bubble — 240x240 standart size + fullscreen preview
+//  Image bubble
 // ═══════════════════════════════════════════════════════════════════════════════
 class _ImageBubble extends StatelessWidget {
   final Message message;
@@ -594,30 +573,19 @@ class _ImageBubble extends StatelessWidget {
     this.onImageTap,
   });
 
-  // ✅ Image URL yasab beradi
   String _url() {
     final raw = message.content.trim();
-
-    // Agar allaqachon to'liq URL bo'lsa
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return raw;
-    }
-
-    // Supabase public storage URL
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
     return 'https://lrkweduvjgmqerygvoaw.supabase.co/storage/v1/object/public/chat_bucket/$raw';
   }
 
   @override
   Widget build(BuildContext context) {
     final imageUrl = _url();
-
     return GestureDetector(
       onTap: () {
-        if (onImageTap != null) {
-          // ✅ To'liq URL ni uzatish
-          if (imageUrl.isNotEmpty) {
-            onImageTap!(imageUrl);
-          }
+        if (onImageTap != null && imageUrl.isNotEmpty) {
+          onImageTap!(imageUrl);
         }
       },
       child: Container(
@@ -632,17 +600,16 @@ class _ImageBubble extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(40),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
+                color: Colors.black.withAlpha(40),
+                blurRadius: 6,
+                offset: const Offset(0, 2))
           ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
             Image.network(
-              message.content,
+              imageUrl,
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
@@ -650,19 +617,17 @@ class _ImageBubble extends StatelessWidget {
                 width: 240,
                 height: 240,
                 color: AppTheme.surfaceLight,
-                child: const Icon(
-                  Icons.broken_image_outlined,
-                  color: AppTheme.textSecondary,
-                ),
+                child: const Icon(Icons.broken_image_outlined,
+                    color: AppTheme.textSecondary),
               ),
               loadingBuilder: (_, child, progress) => progress == null
                   ? child
                   : Container(
-                      width: 240,
-                      height: 240,
-                      color: AppTheme.surfaceLight,
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
+                  width: 240,
+                  height: 240,
+                  color: AppTheme.surfaceLight,
+                  child: const Center(
+                      child: CircularProgressIndicator())),
             ),
             Positioned(
               top: 8,
@@ -671,14 +636,10 @@ class _ImageBubble extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(120),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.fullscreen,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                    color: Colors.black.withAlpha(120),
+                    shape: BoxShape.circle),
+                child: const Icon(Icons.fullscreen,
+                    color: Colors.white, size: 16),
               ),
             ),
             Positioned(
@@ -694,132 +655,6 @@ class _ImageBubble extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Video bubble — 240x240 + fullscreen preview + play icon
-// ═══════════════════════════════════════════════════════════════════════════════
-class _VideoBubble extends StatelessWidget {
-  final Message message;
-  final bool isMine;
-  final bool showSenderName;
-  final Function(String)? onVideoTap;
-
-  const _VideoBubble({
-    required this.message,
-    required this.isMine,
-    required this.showSenderName,
-    this.onVideoTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onVideoTap?.call(message.content),
-      child: Container(
-        width: 240,
-        height: 240,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(40),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Container(
-              width: 240,
-              height: 240,
-              color: AppTheme.surfaceLight,
-              child: const Icon(
-                Icons.video_library_outlined,
-                size: 60,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            Center(
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  size: 32,
-                  color: AppTheme.primary,
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 6,
-              right: 8,
-              child: _TimeStatus(
-                time: _fmtTime(message.timestamp),
-                isMine: isMine,
-                isRead: message.isRead,
-                color: Colors.white,
-                withShadow: true,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  Sticker bubble — 150x150 stiker
-// ═══════════════════════════════════════════════════════════════════════════════
-class _StickerBubble extends StatelessWidget {
-  final Message message;
-  final bool isMine;
-  final bool showSenderName;
-
-  const _StickerBubble({
-    required this.message,
-    required this.isMine,
-    required this.showSenderName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      height: 150,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: Image.network(
-        message.content,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
-          color: AppTheme.surfaceLight,
-          child: const Icon(
-            Icons.image_not_supported_outlined,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        loadingBuilder: (_, child, progress) => progress == null
-            ? child
-            : Container(
-                color: AppTheme.surfaceLight,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
       ),
     );
   }
@@ -830,15 +665,17 @@ class _StickerBubble extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 class _DeletedBubble extends StatelessWidget {
   final bool isMine;
-
   const _DeletedBubble({required this.isMine});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding:
+      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isMine ? AppTheme.primary.withAlpha(120) : AppTheme.surface,
+        color: isMine
+            ? AppTheme.primary.withAlpha(120)
+            : AppTheme.surface,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(18),
           topRight: const Radius.circular(18),
@@ -849,20 +686,14 @@ class _DeletedBubble extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.block_rounded,
-            size: 14,
-            color: Colors.white.withAlpha(150),
-          ),
+          Icon(Icons.block_rounded,
+              size: 14, color: Colors.white.withAlpha(150)),
           const SizedBox(width: 5),
-          Text(
-            "O'chirilgan xabar",
-            style: TextStyle(
-              color: Colors.white.withAlpha(150),
-              fontSize: 13.5,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
+          Text("O'chirilgan xabar",
+              style: TextStyle(
+                  color: Colors.white.withAlpha(150),
+                  fontSize: 13.5,
+                  fontStyle: FontStyle.italic)),
         ],
       ),
     );
@@ -885,19 +716,17 @@ class _ReplyPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = isMine ? Colors.white70 : AppTheme.primary;
-    final isAudio =
-        content.contains('.m4a') ||
+    final accentColor =
+    isMine ? Colors.white70 : AppTheme.primary;
+    final isAudio = content.contains('.m4a') ||
         content.contains('.mp3') ||
         content.contains('audio_');
-    final isImage =
-        content.startsWith('http') &&
+    final isImage = content.startsWith('http') &&
         (content.contains('.jpg') ||
             content.contains('.png') ||
             content.contains('.jpeg') ||
             content.contains('images'));
-    final isVideo =
-        content.startsWith('http') &&
+    final isVideo = content.startsWith('http') &&
         (content.contains('.mp4') ||
             content.contains('.mov') ||
             content.contains('video'));
@@ -913,14 +742,11 @@ class _ReplyPreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            senderName,
-            style: TextStyle(
-              color: accentColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(senderName,
+              style: TextStyle(
+                  color: accentColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(
             isAudio
@@ -933,9 +759,7 @@ class _ReplyPreview extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withAlpha(180),
-              fontSize: 11.5,
-            ),
+                color: Colors.white.withAlpha(180), fontSize: 11.5),
           ),
         ],
       ),
@@ -944,7 +768,7 @@ class _ReplyPreview extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Vaqt + o'qilgan belgisi — UTC+5 DA
+//  Time + read status
 // ═══════════════════════════════════════════════════════════════════════════════
 class _TimeStatus extends StatelessWidget {
   final String time;
@@ -966,18 +790,18 @@ class _TimeStatus extends StatelessWidget {
     final shadows = withShadow
         ? const [Shadow(color: Colors.black54, blurRadius: 4)]
         : null;
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          time, // ← _fmtTime() tomonidan UTC+5 bilan formatlangan
-          style: TextStyle(color: color, fontSize: 10.5, shadows: shadows),
-        ),
+        Text(time,
+            style:
+            TextStyle(color: color, fontSize: 10.5, shadows: shadows)),
         if (isMine) ...[
           const SizedBox(width: 3),
           Icon(
-            isRead ? Icons.done_all_rounded : Icons.done_rounded,
+            isRead
+                ? Icons.done_all_rounded
+                : Icons.done_rounded,
             size: 13,
             color: isRead ? Colors.lightBlueAccent : color,
             shadows: withShadow

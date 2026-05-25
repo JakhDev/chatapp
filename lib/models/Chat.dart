@@ -1,56 +1,112 @@
-enum MessageType { text, image, audio }
+import 'dart:convert';
 
 enum ChatType { personal, group }
 
-// ── User ──────────────────────────────────────────────────────────────────────
-class User {
-  final String id;
-  final String name;
-  final String avatarUrl;
-  final String email;
-  bool isOnline;
+enum MessageType { text, image, audio }
 
-  User({
+class Chat {
+  String id;
+  String name;
+  ChatType type;
+  List<String> memberIds;
+  List<Message> messages;
+  String? lastMessage;
+  DateTime? lastMessageTime;
+  int unreadCount;
+  String? avatarUrl; // FIXED: Avatar URL qo'shildi
+
+  Chat({
     required this.id,
     required this.name,
-    this.avatarUrl = '',
-    this.email = '',
-    this.isOnline = false,
+    required this.type,
+    required this.memberIds,
+    this.messages = const [],
+    this.lastMessage,
+    this.lastMessageTime,
+    this.unreadCount = 0,
+    this.avatarUrl, // FIXED: Constructor parametriga qo'shildi
   });
 
-  factory User.fromJson(Map<String, dynamic> j) => User(
-    id: j['id'] as String? ?? '',
-    name: j['name'] as String? ?? 'Foydalanuvchi',
-    avatarUrl: j['avatarurl'] as String? ?? j['avatarUrl'] as String? ?? '',
-    email: j['email'] as String? ?? '',
-    isOnline: j['isonline'] as bool? ?? j['isOnline'] as bool? ?? false,
-  );
+  // Getter: last message sender id
+  String? get lastMessageSenderId {
+    if (messages.isEmpty) return null;
+    return messages.last.senderId;
+  }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'avatarurl': avatarUrl,
-    'email': email,
-    'isonline': isOnline,
-  };
+  // Getter: last message is read
+  bool? get lastMessageIsRead {
+    if (messages.isEmpty) return null;
+    return messages.last.isRead;
+  }
+
+  Chat copyWith({
+    String? id,
+    String? name,
+    ChatType? type,
+    List<String>? memberIds,
+    List<Message>? messages,
+    String? lastMessage,
+    DateTime? lastMessageTime,
+    int? unreadCount,
+    String? avatarUrl, // FIXED: copyWith'ga qo'shildi
+  }) {
+    return Chat(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      memberIds: memberIds ?? this.memberIds,
+      messages: messages ?? this.messages,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastMessageTime: lastMessageTime ?? this.lastMessageTime,
+      unreadCount: unreadCount ?? this.unreadCount,
+      avatarUrl: avatarUrl ?? this.avatarUrl, // FIXED
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type.toString().split('.').last,
+      'memberIds': memberIds,
+      'lastMessage': lastMessage,
+      'lastMessageTime': lastMessageTime?.toIso8601String(),
+      'unreadCount': unreadCount,
+      'avatarUrl': avatarUrl, // FIXED
+    };
+  }
+
+  factory Chat.fromJson(Map<String, dynamic> json) {
+    return Chat(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      type: json['type'] == 'group' ? ChatType.group : ChatType.personal,
+      memberIds: List<String>.from(json['memberIds'] ?? []),
+      lastMessage: json['lastMessage'],
+      lastMessageTime: json['lastMessageTime'] != null
+          ? DateTime.parse(json['lastMessageTime'])
+          : null,
+      unreadCount: json['unreadCount'] ?? 0,
+      avatarUrl: json['avatarUrl'], // FIXED
+    );
+  }
 }
 
-// ── Message ───────────────────────────────────────────────────────────────────
 class Message {
   final String id;
   final String chatId;
   final String senderId;
   final String senderName;
-  final String content;
+  String content;
   final MessageType type;
   final DateTime timestamp;
-  final bool isRead;
-  final bool isEdited;
-  final bool isDeleted;
+  bool isRead;
+  bool isEdited;
+  bool isDeleted;
   final String? replyToId;
   final String? replyToContent;
   final String? replyToSender;
-  final int? audioDuration; // ovozli xabar davomiyligi (soniyalarda)
+  final int? audioDuration;
 
   Message({
     required this.id,
@@ -58,8 +114,8 @@ class Message {
     required this.senderId,
     required this.senderName,
     required this.content,
-    this.type = MessageType.text,
-    DateTime? timestamp,
+    required this.type,
+    required this.timestamp,
     this.isRead = false,
     this.isEdited = false,
     this.isDeleted = false,
@@ -67,7 +123,7 @@ class Message {
     this.replyToContent,
     this.replyToSender,
     this.audioDuration,
-  }) : timestamp = timestamp ?? DateTime.now();
+  });
 
   Message copyWith({
     String? id,
@@ -84,100 +140,112 @@ class Message {
     String? replyToContent,
     String? replyToSender,
     int? audioDuration,
-  }) => Message(
-    id: id ?? this.id,
-    chatId: chatId ?? this.chatId,
-    senderId: senderId ?? this.senderId,
-    senderName: senderName ?? this.senderName,
-    content: content ?? this.content,
-    type: type ?? this.type,
-    timestamp: timestamp ?? this.timestamp,
-    isRead: isRead ?? this.isRead,
-    isEdited: isEdited ?? this.isEdited,
-    isDeleted: isDeleted ?? this.isDeleted,
-    replyToId: replyToId ?? this.replyToId,
-    replyToContent: replyToContent ?? this.replyToContent,
-    replyToSender: replyToSender ?? this.replyToSender,
-    audioDuration: audioDuration ?? this.audioDuration,
-  );
-
-  factory Message.fromJson(Map<String, dynamic> j) {
-    final rawTs = j['created_at'] as String? ?? j['timestamp'] as String?;
-    final ts = rawTs != null
-        ? DateTime.tryParse(rawTs) ?? DateTime.now()
-        : DateTime.now();
-
+  }) {
     return Message(
-      id: j['id']?.toString() ?? '',
-      chatId: (j['chatid'] ?? j['chatId']) as String? ?? '',
-      senderId: (j['senderid'] ?? j['senderId']) as String? ?? '',
-      senderName: (j['sendername'] ?? j['senderName']) as String? ?? '',
-      content: j['content'] as String? ?? '',
-      type: j['type'] == 'image'
-          ? MessageType.image
-          : j['type'] == 'audio'
-          ? MessageType.audio
-          : MessageType.text,
-      timestamp: ts,
-      isRead: (j['isread'] ?? j['is_read'] ?? j['isRead']) as bool? ?? false,
-      isEdited:
-      (j['isedited'] ?? j['is_edited'] ?? j['isEdited']) as bool? ?? false,
-      isDeleted:
-      (j['isdeleted'] ?? j['is_deleted'] ?? j['isDeleted']) as bool? ??
-          false,
-      replyToId: j['reply_to_id'] as String?,
-      replyToContent: j['reply_to_content'] as String?,
-      replyToSender: j['reply_to_sender'] as String?,
-      audioDuration: j['audio_duration'] as int?,
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      isEdited: isEdited ?? this.isEdited,
+      isDeleted: isDeleted ?? this.isDeleted,
+      replyToId: replyToId ?? this.replyToId,
+      replyToContent: replyToContent ?? this.replyToContent,
+      replyToSender: replyToSender ?? this.replyToSender,
+      audioDuration: audioDuration ?? this.audioDuration,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'chatid': chatId,
-    'senderid': senderId,
-    'sendername': senderName,
-    'content': content,
-    'type': type == MessageType.image
-        ? 'image'
-        : type == MessageType.audio
-        ? 'audio'
-        : 'text',
-    'isread': isRead,
-    'is_edited': isEdited,
-    'is_deleted': isDeleted,
-    'reply_to_id': replyToId,
-    'reply_to_content': replyToContent,
-    'reply_to_sender': replyToSender,
-    if (audioDuration != null) 'audio_duration': audioDuration,
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'chatId': chatId,
+      'senderId': senderId,
+      'senderName': senderName,
+      'content': content,
+      'type': type.toString().split('.').last,
+      'timestamp': timestamp.toIso8601String(),
+      'isRead': isRead,
+      'isEdited': isEdited,
+      'isDeleted': isDeleted,
+      'replyToId': replyToId,
+      'replyToContent': replyToContent,
+      'replyToSender': replyToSender,
+      'audioDuration': audioDuration,
+    };
+  }
+
+  factory Message.fromJson(Map<String, dynamic> json) {
+    return Message(
+      id: json['id'] ?? '',
+      chatId: json['chatId'] ?? '',
+      senderId: json['senderId'] ?? '',
+      senderName: json['senderName'] ?? '',
+      content: json['content'] ?? '',
+      type: json['type'] == 'image'
+          ? MessageType.image
+          : json['type'] == 'audio'
+          ? MessageType.audio
+          : MessageType.text,
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
+          : DateTime.now(),
+      isRead: json['isRead'] ?? false,
+      isEdited: json['isEdited'] ?? false,
+      isDeleted: json['isDeleted'] ?? false,
+      replyToId: json['replyToId'],
+      replyToContent: json['replyToContent'],
+      replyToSender: json['replyToSender'],
+      audioDuration: json['audioDuration'],
+    );
+  }
 }
 
-// ── Chat ──────────────────────────────────────────────────────────────────────
-class Chat {
+class User {
   final String id;
   final String name;
-  final ChatType type;
-  final List<String> memberIds;
-  final List<Message> messages;
-  String? lastMessage;
-  DateTime? lastMessageTime;
-  int unreadCount;
-  final String? lastMessageSenderId;
-  final bool? lastMessageIsRead;
-  String? avatarUrl;
+  final bool isOnline;
+  final String? avatarUrl; // FIXED: Avatar URL qo'shildi
 
-  Chat({
+  User({
     required this.id,
     required this.name,
-    required this.type,
-    required this.memberIds,
-    List<Message>? messages,
-    this.lastMessage,
-    this.lastMessageTime,
-    this.unreadCount = 0,
-    this.lastMessageSenderId,
-    this.lastMessageIsRead,
+    this.isOnline = false,
+    this.avatarUrl, // FIXED: Constructor parametriga qo'shildi
+  });
 
-    this.avatarUrl,
-  }) : messages = messages ?? [];
+  User copyWith({
+    String? id,
+    String? name,
+    bool? isOnline,
+    String? avatarUrl, // FIXED: copyWith'ga qo'shildi
+  }) {
+    return User(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      isOnline: isOnline ?? this.isOnline,
+      avatarUrl: avatarUrl ?? this.avatarUrl, // FIXED
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'isonline': isOnline,
+      'avatarurl': avatarUrl, // FIXED: Supabase column nomiga mos
+    };
+  }
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      isOnline: json['isonline'] ?? false,
+      avatarUrl: json['avatarurl'], // FIXED: Supabase column nomiga mos
+    );
+  }
 }

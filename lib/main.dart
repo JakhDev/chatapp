@@ -19,12 +19,16 @@ Future<void> main() async {
   ));
 
   await Supabase.initialize(
-    url:     'https://lrkweduvjgmqerygvoaw.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxya3dlZHV2amdtcWVyeWd2b2F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNjUzMDgsImV4cCI6MjA5NDc0MTMwOH0.5nxPSEDvZJzFSl86lPVLxhoeXYtKQ50HRsmBzCb5H00',
+    url: 'https://lrkweduvjgmqerygvoaw.supabase.co',
+    anonKey:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxya3dlZHV2amdtcWVyeWd2b2F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNjUzMDgsImV4cCI6MjA5NDc0MTMwOH0.5nxPSEDvZJzFSl86lPVLxhoeXYtKQ50HRsmBzCb5H00',
   );
 
   runApp(const ChatApp());
 }
+
+// ✅ Global navigator key — logout da butun stack ni tozalash uchun
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class ChatApp extends StatelessWidget {
   const ChatApp({super.key});
@@ -33,26 +37,26 @@ class ChatApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppSettings()),  // ← yangi
+        ChangeNotifierProvider(create: (_) => AppSettings()),
         ChangeNotifierProvider(create: (_) => WebSocketService()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProxyProvider<WebSocketService, ChatProvider>(
-          create:  (ctx) => ChatProvider(ctx.read<WebSocketService>()),
-          update:  (_, ws, prev) => prev ?? ChatProvider(ws),
+          create: (ctx) => ChatProvider(ctx.read<WebSocketService>()),
+          update: (_, ws, prev) => prev ?? ChatProvider(ws),
         ),
       ],
       child: Consumer<AppSettings>(
         builder: (_, settings, __) => MaterialApp(
-          title:                     'FluxChat',
+          navigatorKey: navigatorKey, // ✅ global key
+          title: 'FluxChat',
           debugShowCheckedModeBanner: false,
-          theme:                     AppTheme.lightTheme,
-          darkTheme:                 AppTheme.darkTheme,
-          themeMode:                 settings.flutterThemeMode,
-          initialRoute: '/',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: settings.flutterThemeMode,
+          home: const _AppEntry(),
           routes: {
-            '/':      (_) => const _AppEntry(),
-            '/login': (_) => const SplashScreen(),
-            '/home':  (_) => const HomeScreen(),
+            '/splash': (_) => const SplashScreen(),
+            '/home': (_) => const HomeScreen(),
           },
         ),
       ),
@@ -62,6 +66,7 @@ class ChatApp extends StatelessWidget {
 
 class _AppEntry extends StatefulWidget {
   const _AppEntry();
+
   @override
   State<_AppEntry> createState() => _AppEntryState();
 }
@@ -71,20 +76,29 @@ class _AppEntryState extends State<_AppEntry> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session != null && mounted) {
-        final u    = session.user;
-        final name = u.userMetadata?['full_name'] as String? ??
-            u.userMetadata?['name'] as String? ??
-            u.email ?? 'Foydalanuvchi';
-        context.read<ChatProvider>().login(name);
-      }
+      _tryLogin();
     });
+  }
+
+  void _tryLogin() {
+    if (!mounted) return;
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+    final u = session.user;
+    final name = u.userMetadata?['full_name'] as String? ??
+        u.userMetadata?['name'] as String? ??
+        u.email ??
+        'Foydalanuvchi';
+    context.read<ChatProvider>().login(name);
   }
 
   @override
   Widget build(BuildContext context) {
-    final session = Supabase.instance.client.auth.currentSession;
-    return session != null ? const HomeScreen() : const SplashScreen();
+    // ✅ faqat ChatProvider ni kuzat
+    final chatUser = context.watch<ChatProvider>().currentUser;
+    if (chatUser == null) {
+      return const SplashScreen();
+    }
+    return const HomeScreen();
   }
 }
